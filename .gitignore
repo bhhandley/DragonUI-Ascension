@@ -1,0 +1,9 @@
+# Backup files
+*.bak
+*.lua.bak
+
+# macOS
+.DS_Store
+
+# VSCode
+.vscode/
