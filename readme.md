@@ -6,7 +6,7 @@
 
 A personal project bringing Dragonflight UI aesthetics to WotLK 3.3.5a.
 
-![DragonUI Interface](https://i.postimg.cc/BbcYv1jx/1.png)
+![DragonUI Interface](https://i.postimg.cc/L8MPT006/1.png)
 
 ![DragonUI Features](https://i.postimg.cc/KYk0MWKc/3.png)
 
