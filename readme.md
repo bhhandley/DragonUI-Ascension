@@ -49,4 +49,3 @@ This project combines and adapts code from several sources:
 
 - **CromieCraft Community** - For helping test and provide feedback on various addon features
 - **Teknishun** - Special thanks for extensive testing and valuable feedback
-- 
