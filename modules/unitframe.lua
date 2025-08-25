@@ -1683,6 +1683,24 @@ function unitframe.UpdatePlayerFrameTextSelective(showHealth, showMana)
     end
 end
 
+-- FIXED: Define IsMouseOverFrame globally for pet frame usage
+function IsMouseOverFrame(frame)
+    if not frame or not frame:IsVisible() then return false end
+    local mouseX, mouseY = GetCursorPosition()
+    local scale = frame:GetEffectiveScale()
+    if not scale or scale == 0 then return false end
+    mouseX = mouseX / scale
+    mouseY = mouseY / scale
+    
+    local left, bottom, width, height = frame:GetLeft(), frame:GetBottom(), frame:GetWidth(), frame:GetHeight()
+    if not (left and bottom and width and height) then return false end
+    
+    local right = left + width
+    local top = bottom + height
+    
+    return mouseX >= left and mouseX <= right and mouseY >= bottom and mouseY <= top
+end
+
 -- Function to update pet frame custom text displays
 function unitframe.UpdatePetFrameText()
     if not (addon and addon.db and addon.db.profile and addon.db.profile.unitframe) then
