@@ -1544,3 +1544,13 @@ function addon.RefreshBags()
 	addon.RefreshBagsVehicle();
 end
 
+-- Reanchor LFD (Looking For Dungeon) search status frame
+local function ReanchorLFDStatus()
+	if not LFDSearchStatus or not MiniMapLFGFrame then return end
+	LFDSearchStatus:ClearAllPoints()
+	LFDSearchStatus:SetPoint("BOTTOM", MiniMapLFGFrame, "TOP", 0, 30)
+end
+
+ReanchorLFDStatus()
+hooksecurefunc("LFDSearchStatus_Update", ReanchorLFDStatus)
+
