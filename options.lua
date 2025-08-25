@@ -1031,6 +1031,43 @@ style = {
 					set = createSetFunction("map", "zoom_in_out", nil, "RefreshMinimap"),
 					order = 10,
 				},
+				-- MAIL ICON POSITION
+                mail_header = {
+                    type = 'header',
+                    name = "Mail Icon Position",
+                    order = 11,
+                },
+                mail_icon_x = {
+                    type = 'range',
+                    name = "Mail Icon X Position",
+                    desc = "Horizontal position of the mail notification icon relative to minimap\n• Negative values = more to the left\n• Positive values = more to the right",
+                    min = -100, max = 100, step = 1,
+                    get = function() return addon.db.profile.map.mail_icon_x end,
+                    set = createSetFunction("map", "mail_icon_x", nil, "RefreshMinimap"),
+                    order = 12,
+                },
+                mail_icon_y = {
+                    type = 'range',
+                    name = "Mail Icon Y Position",
+                    desc = "Vertical position of the mail notification icon relative to minimap\n• Negative values = more down\n• Positive values = more up",
+                    min = -100, max = 100, step = 1,
+                    get = function() return addon.db.profile.map.mail_icon_y end,
+                    set = createSetFunction("map", "mail_icon_y", nil, "RefreshMinimap"),
+                    order = 13,
+                },
+                mail_reset = {
+                    type = 'execute',
+                    name = "Reset Mail Icon Position",
+                    desc = "Reset mail icon to default position (-4, -5)",
+                    func = function()
+                        addon.db.profile.map.mail_icon_x = -4
+                        addon.db.profile.map.mail_icon_y = -5
+                        if addon.RefreshMinimap then
+                            addon.RefreshMinimap()
+                        end
+                    end,
+                    order = 14,
+                },
 			},
 		},
 		

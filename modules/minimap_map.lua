@@ -43,8 +43,19 @@ Minimap:SetBlipTexture(useNewBlipStyle and addon._dir..'objecticons' or blipDefa
 -- mail
 MiniMapMailBorder:SetTexture(nil)
 MiniMapMailFrame:ClearAllPoints()
-MiniMapMailFrame:SetPoint('BOTTOMLEFT', Minimap, 'BOTTOMLEFT', -4, -5)
+-- Use dynamic config if available, fallback to static config
+local mailIconX = addon.db and addon.db.profile and addon.db.profile.map and addon.db.profile.map.mail_icon_x;
+if mailIconX == nil then
+    mailIconX = -4; -- fallback default
+end
+local mailIconY = addon.db and addon.db.profile and addon.db.profile.map and addon.db.profile.map.mail_icon_y;
+if mailIconY == nil then
+    mailIconY = -5; -- fallback default
+end
+MiniMapMailFrame:SetPoint('BOTTOMLEFT', Minimap, 'BOTTOMLEFT', mailIconX, mailIconY)
 atlas(MiniMapMailIcon, 'ui-hud-minimap-mail-up', true);
+
+
 
 -- pvp
 MiniMapBattlefieldIcon:Hide()
@@ -344,6 +355,14 @@ function addon.RefreshMinimap()
 			end
 		end
 	end
+
+	-- Update mail icon position
+    local mailIconX = addon.db.profile.map.mail_icon_x;
+    local mailIconY = addon.db.profile.map.mail_icon_y;
+    if MiniMapMailFrame and mailIconX and mailIconY then
+        MiniMapMailFrame:ClearAllPoints();
+        MiniMapMailFrame:SetPoint('BOTTOMLEFT', Minimap, 'BOTTOMLEFT', mailIconX, mailIconY);
+    end
 end
 
 -- Fix quest tracker position to give more separation from minimap
