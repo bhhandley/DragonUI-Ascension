@@ -135,7 +135,7 @@ local frames = {
 -- Control de refreshes para evitar múltiples refreshes rápidos
 local lastRefreshTime = {
     player = 0,
-    target = 0,  
+    target = 0,
     focus = 0
 };
 
@@ -155,6 +155,8 @@ local auraCache = {
 -- =================================================================
 
 local RefreshCastbar;
+-- Forward declarations for functions used before definition
+local HandleCastStop;
 
 -- Función para forzar la capa correcta de StatusBar texture
 local function ForceStatusBarTextureLayer(statusBar)
@@ -833,6 +835,70 @@ end
 -- FUNCIONES UPDATE UNIFICADAS
 -- =================================================================
 
+
+-- Función unificada para manejar parada/interrupción de cast
+local function HandleCastStop(castbarType, event, isInterrupted)
+    local state = castbarStates[castbarType];
+    local frameData = frames[castbarType];
+    local cfg = addon.db.profile.castbar;
+
+    if castbarType ~= "player" then
+        cfg = cfg[castbarType];
+    end
+
+    if not state.casting and not state.isChanneling then
+        return
+    end
+
+    -- Calcular porcentaje de completado
+    local completionPercentage = 0;
+    if state.maxValue and state.maxValue > 0 then
+        if state.isChanneling then
+            completionPercentage = (state.maxValue - state.currentValue) / state.maxValue;
+        else
+            completionPercentage = state.currentValue / state.maxValue;
+        end
+    end
+
+    -- Manejar según el tipo de evento y completado
+    if isInterrupted then
+        -- Interrupción real - mostrar estado interrumpido
+        if frameData.shield then
+            frameData.shield:Hide()
+        end
+        HideAllChannelTicks(frameData.ticks, 15);
+
+        frameData.castbar:SetStatusBarTexture(TEXTURES.interrupted);
+        frameData.castbar:SetStatusBarColor(1, 0, 0, 1);
+        ForceStatusBarTextureLayer(frameData.castbar);
+
+        -- CORREGIDO: Para interrupciones, usar el sistema de clipping como las otras barras
+        frameData.castbar:SetValue(state.maxValue); -- Llenar completamente la barra
+
+        -- Usar UpdateTextureClipping para mantener capas consistentes
+        if frameData.castbar.UpdateTextureClipping then
+            frameData.castbar:UpdateTextureClipping(1.0, false); -- Mostrar completo sin recorte
+        end
+
+        SetCastText(castbarType, "Interrupted");
+
+        state.casting = false;
+        state.isChanneling = false;
+        state.holdTime = cfg.holdTimeInterrupt or 0.8;
+    elseif completionPercentage >= (state.isChanneling and 0.9 or 0.95) then
+        -- Completado exitosamente
+        if castbarType == "player" then
+            state.castSucceeded = true; -- Activar período de gracia
+        else
+            FinishSpell(castbarType);
+        end
+    else
+        -- Cancelación manual (movimiento, Esc, etc.) o cambio de hechizo.
+        -- Tratar como una interrupción para mostrar la barra roja.
+        HandleCastStop(castbarType, event, true);
+    end
+end
+
 -- Función de actualización principal unificada
 local function UpdateCastbar(castbarType, self, elapsed)
     local state = castbarStates[castbarType];
@@ -1015,7 +1081,15 @@ local function UpdateCastbar(castbarType, self, elapsed)
         if not isStillCasting and not isStillChanneling then
             -- The game says we are not casting/channeling, but our addon thinks we are.
             -- This is a silent interruption.
-            HandleCastStop(castbarType, 'UNIT_SPELLCAST_INTERRUPTED', true);
+            if HandleCastStop then
+                HandleCastStop(castbarType, 'UNIT_SPELLCAST_INTERRUPTED', true);
+            else
+                -- Fallback: hide castbar immediately
+                self:Hide();
+                state.casting = false;
+                state.isChanneling = false;
+                state.holdTime = 0;
+            end
             return; -- Stop further processing for this frame
         end
         -- No sincronizar con Blizzard durante período de gracia
@@ -1306,68 +1380,6 @@ local function HandleChannelStart(castbarType, unit)
     end
 end
 
--- Función unificada para manejar parada/interrupción de cast
-local function HandleCastStop(castbarType, event, isInterrupted)
-    local state = castbarStates[castbarType];
-    local frameData = frames[castbarType];
-    local cfg = addon.db.profile.castbar;
-
-    if castbarType ~= "player" then
-        cfg = cfg[castbarType];
-    end
-
-    if not state.casting and not state.isChanneling then
-        return
-    end
-
-    -- Calcular porcentaje de completado
-    local completionPercentage = 0;
-    if state.maxValue and state.maxValue > 0 then
-        if state.isChanneling then
-            completionPercentage = (state.maxValue - state.currentValue) / state.maxValue;
-        else
-            completionPercentage = state.currentValue / state.maxValue;
-        end
-    end
-
-    -- Manejar según el tipo de evento y completado
-    if isInterrupted then
-        -- Interrupción real - mostrar estado interrumpido
-        if frameData.shield then
-            frameData.shield:Hide()
-        end
-        HideAllChannelTicks(frameData.ticks, 15);
-
-        frameData.castbar:SetStatusBarTexture(TEXTURES.interrupted);
-        frameData.castbar:SetStatusBarColor(1, 0, 0, 1);
-        ForceStatusBarTextureLayer(frameData.castbar);
-
-        -- CORREGIDO: Para interrupciones, usar el sistema de clipping como las otras barras
-        frameData.castbar:SetValue(state.maxValue); -- Llenar completamente la barra
-
-        -- Usar UpdateTextureClipping para mantener capas consistentes
-        if frameData.castbar.UpdateTextureClipping then
-            frameData.castbar:UpdateTextureClipping(1.0, false); -- Mostrar completo sin recorte
-        end
-
-        SetCastText(castbarType, "Interrupted");
-
-        state.casting = false;
-        state.isChanneling = false;
-        state.holdTime = cfg.holdTimeInterrupt or 0.8;
-    elseif completionPercentage >= (state.isChanneling and 0.9 or 0.95) then
-        -- Completado exitosamente
-        if castbarType == "player" then
-            state.castSucceeded = true; -- Activar período de gracia
-        else
-            FinishSpell(castbarType);
-        end
-    else
-        -- Cancelación manual (movimiento, Esc, etc.) o cambio de hechizo.
-        -- Tratar como una interrupción para mostrar la barra roja.
-        HandleCastStop(castbarType, event, true);
-    end
-end
 
 -- Función principal unificada para manejar eventos de casting
 local function HandleCastingEvents(castbarType, event, unit, ...)
@@ -1721,8 +1733,6 @@ local function CreateCastbar(castbarType)
 
     -- Configurar OnUpdate handler
     frameData.castbar:SetScript('OnUpdate', CreateUpdateFunction(castbarType));
-    
-
 
 end
 
@@ -1740,9 +1750,9 @@ RefreshCastbar = function(castbarType)
         -- Descomentar para debug: print("[DragonUI Castbar] BLOCKED rapid refresh for " .. castbarType .. " (time since last: " .. string.format("%.3f", timeSinceLastRefresh) .. "s)");
         return;
     end
-    
+
     lastRefreshTime[castbarType] = currentTime;
-    
+
     local cfg = addon.db.profile.castbar;
     if castbarType ~= "player" then
         cfg = cfg[castbarType];
@@ -1781,7 +1791,7 @@ RefreshCastbar = function(castbarType)
     if not frames[castbarType].castbar then
         CreateCastbar(castbarType);
 
-        --PROBANDO
+        -- PROBANDO
     end
 
     local frameData = frames[castbarType];
@@ -1826,9 +1836,6 @@ RefreshCastbar = function(castbarType)
         sparkTexture:SetBlendMode('ADD');
     end
 
-
-    
-    
     -- Posicionar frame de fondo de texto
     if frameData.textBackground then
         frameData.textBackground:ClearAllPoints();
@@ -1927,16 +1934,14 @@ RefreshCastbar = function(castbarType)
     -- Asegurar que el color de vértice se mantenga después del refresh
     ApplyVertexColor(frameData.castbar);
 
-   -- CRITICAL: Forzar orden de capas después del refresh (doble seguridad)
+    -- CRITICAL: Forzar orden de capas después del refresh (doble seguridad)
     -- Esto garantiza que múltiples refreshes no alteren el sublevel del spark
     -- CORREGIDO: Usar la función helper para asegurar que se usa el sublevel correcto (5)
-
 
     -- Aplicar configuración de modo de texto
     if cfg.text_mode then
         SetTextMode(castbarType, cfg.text_mode);
     end
-
 
 end
 
@@ -2042,21 +2047,11 @@ end
 local function InitializeCastbar()
     -- Crear frame de inicialización único para todos los eventos
     local initFrame = CreateFrame('Frame', 'DragonUICastbarEventHandler');
-    
+
     -- Registrar todos los eventos necesarios en un solo lugar
-    local allEvents = {
-        'PLAYER_ENTERING_WORLD',
-        'UNIT_SPELLCAST_START', 
-        'UNIT_SPELLCAST_STOP', 
-        'UNIT_SPELLCAST_FAILED',
-        'UNIT_SPELLCAST_INTERRUPTED', 
-        'UNIT_SPELLCAST_CHANNEL_START', 
-        'UNIT_SPELLCAST_CHANNEL_STOP',
-        'UNIT_SPELLCAST_SUCCEEDED',
-        'UNIT_AURA',
-        'PLAYER_TARGET_CHANGED',
-        'PLAYER_FOCUS_CHANGED'
-    };
+    local allEvents = {'PLAYER_ENTERING_WORLD', 'UNIT_SPELLCAST_START', 'UNIT_SPELLCAST_STOP', 'UNIT_SPELLCAST_FAILED',
+                       'UNIT_SPELLCAST_INTERRUPTED', 'UNIT_SPELLCAST_CHANNEL_START', 'UNIT_SPELLCAST_CHANNEL_STOP',
+                       'UNIT_SPELLCAST_SUCCEEDED', 'UNIT_AURA', 'PLAYER_TARGET_CHANGED', 'PLAYER_FOCUS_CHANGED'};
 
     for _, event in ipairs(allEvents) do
         initFrame:RegisterEvent(event);
@@ -2078,10 +2073,8 @@ local function InitializeCastbar()
         end);
     end
 
-
 end
 
 -- Iniciar inicialización
 InitializeCastbar();
-
 

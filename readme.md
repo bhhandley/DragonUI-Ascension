@@ -37,6 +37,10 @@ This addon is not finished and may contain bugs. I'm working on it alone while s
 
 If you're interested in helping develop it or making improvements, contributions are welcome! There's definitely room for optimization and fixes.
 
+## Known Issues
+
+- **Party Frames Vehicle Bug:** Party frames do not display correctly when party members enter vehicles
+
 ## Credits
 
 This project combines and adapts code from several sources:
