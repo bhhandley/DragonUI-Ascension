@@ -23,7 +23,7 @@ A personal project bringing Dragonflight UI aesthetics to WotLK 3.3.5a.
 
 ## Installation
 
-1. Download the latest release from the [Releases page](https://github.com/NeticSoul/DragonUI/releases/tag/v1.0.1)
+1. Download the latest release from the [Releases page](https://github.com/NeticSoul/DragonUI/releases/tag/v1.0.3)
 2. Extract the downloaded ZIP file
 3. Rename the extracted folder from `DragonUI-x.x.x` to `DragonUI`
 4. Move the `DragonUI` folder to `Interface\AddOns`
