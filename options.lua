@@ -930,10 +930,10 @@ style = {
 				reset_position = {
 					type = 'execute',
 					name = "Reset to Default Position",
-					desc = "Reset quest tracker to the default position (-100, -290)",
+					desc = "Reset quest tracker to the default position (-115, -250)",
 					func = function()
-						addon.db.profile.map.quest_tracker_x = -100
-						addon.db.profile.map.quest_tracker_y = -290
+						addon.db.profile.map.quest_tracker_x = -115
+						addon.db.profile.map.quest_tracker_y = -250
 						if addon.RefreshQuestTrackerPosition then
 							addon.RefreshQuestTrackerPosition()
 						end

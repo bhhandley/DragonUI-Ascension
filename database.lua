@@ -119,8 +119,8 @@ local defaults = {
 			fade_button = false,
 			zonetext_font_size = 12,
 			zoom_in_out = false,
-			quest_tracker_x = -100,
-			quest_tracker_y = -290,
+			quest_tracker_x = -115,
+			quest_tracker_y = -250,
 			-- MAIL ICON SETTINGS
             mail_icon_x = -4,
             mail_icon_y = -5,
