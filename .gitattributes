@@ -1,0 +1,6 @@
+# Exclude these files and directories from GitHub's ZIP downloads
+.gitignore export-ignore
+.github/ export-ignore
+README.md export-ignore
+CLAUDE.md export-ignore
+*.md export-ignore
