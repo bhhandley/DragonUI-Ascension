@@ -1,3 +1,2 @@
 # Exclude these files and directories from GitHub's ZIP downloads
 .gitignore export-ignore
-.github/ export-ignore
