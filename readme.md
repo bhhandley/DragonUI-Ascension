@@ -23,7 +23,7 @@ A personal project bringing Dragonflight UI aesthetics to WotLK 3.3.5a.
 
 ## Installation
 
-1. Download the latest release from the [Releases page](https://github.com/NeticSoul/DragonUI/releases/tag/v1.0.3)
+1. Download the latest release from the [Releases page](https://github.com/NeticSoul/DragonUI/releases/tag/v1.0.4)
 2. Extract the downloaded ZIP file
 3. Rename the extracted folder from `DragonUI-x.x.x` to `DragonUI`
 4. Move the `DragonUI` folder to `Interface\AddOns`
@@ -39,7 +39,8 @@ If you're interested in helping develop it or making improvements, contributions
 
 ## Known Issues
 
-- **Party Frames Vehicle Bug:** Party frames do not display correctly when party members enter vehicles
+- **Party Frames Vehicle Bug:** Party frames do not display correctly when party members enter vehicles.
+- Many other bugs are still present and will be polished over time.
 
 ## Credits
 

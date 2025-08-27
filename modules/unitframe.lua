@@ -17,9 +17,54 @@ addon.unitframe = unitframe
 -- Module frame object to store custom UI elements
 local frame = {}
 
+-- =====================================================================
+-- START: TAINT-FREE PET THREAT SYSTEM
+-- This system prevents combat errors by separating configuration from the combat event.
+-- =====================================================================
+-- 1. A local variable to store the current state of the threat glow setting.
+--    This avoids accessing addon settings during combat.
+local isPetThreatGlowEnabled = true 
+
+-- 2. A function that will be called from the options menu to turn the system on or off.
+function unitframe.SetPetThreatGlow(enabled)
+    isPetThreatGlowEnabled = enabled
+end
+-- =====================================================================
+-- END: TAINT-FREE PET THREAT SYSTEM
+-- =====================================================================
+
+-- =====================================================================
+-- START: TAINT-FREE CONFIGURATION CACHE
+-- Estas variables locales guardan la configuración para evitar leerla en combate.
+-- =====================================================================
+local safeConfig = {
+    player = {},
+    target = {},
+    focus = {},
+    party = {},
+    pet = {}
+}
+
+-- Esta función se llamará cada vez que se cambie una opción para actualizar nuestra caché segura.
+function unitframe.UpdateSafeConfig()
+    if not (addon and addon.db and addon.db.profile and addon.db.profile.unitframe) then return end
+    local db = addon.db.profile.unitframe
+    
+    safeConfig.player = db.player or {}
+    safeConfig.target = db.target or {}
+    safeConfig.focus = db.focus or {}
+    safeConfig.party = db.party or {}
+    safeConfig.pet = db.pet or {}
+end
+-- =====================================================================
+-- END: TAINT-FREE CONFIGURATION CACHE
+-- =====================================================================
+
 -- Famous players table for special highlighting or treatment
 -- Add player names as keys with 'true' as value to mark them as famous
-unitframe.famous = {['Patufet'] = true}
+unitframe.famous = {
+    ['Patufet'] = true
+}
 
 ------------------------------------------
 -- Configuration and State Variables
@@ -29,18 +74,19 @@ local mName = 'UnitFrame'
 
 -- WoW 3.3.5a Global API references for compatibility and performance
 -- Localizing these functions improves performance by avoiding global lookups
-local InCombatLockdown = InCombatLockdown       -- Checks if player is in combat lockdown
+local InCombatLockdown = InCombatLockdown -- Checks if player is in combat lockdown
 local UnitAffectingCombat = UnitAffectingCombat -- Checks if a unit is in combat
-local CreateFrame = CreateFrame                 -- Creates UI frame objects
-local UIParent = UIParent                       -- The main UI container frame
-local UnitExists = UnitExists                   -- Checks if a unit exists
-local UnitHealth = UnitHealth                   -- Gets current health of a unit
-local UnitHealthMax = UnitHealthMax             -- Gets maximum health of a unit
-local UnitPower = UnitPower                     -- Gets current power (mana, energy, etc.) of a unit
-local UnitPowerMax = UnitPowerMax               -- Gets maximum power of a unit
+local CreateFrame = CreateFrame -- Creates UI frame objects
+local UIParent = UIParent -- The main UI container frame
+local UnitExists = UnitExists -- Checks if a unit exists
+local UnitHealth = UnitHealth -- Gets current health of a unit
+local UnitHealthMax = UnitHealthMax -- Gets maximum health of a unit
+local UnitPower = UnitPower -- Gets current power (mana, energy, etc.) of a unit
+local UnitPowerMax = UnitPowerMax -- Gets maximum power of a unit
 
 -- Empty function used to disable or override default functionality
-local function noop() end
+local function noop()
+end
 
 --[[
 * Optimized text truncation function to prevent flickering
@@ -55,29 +101,31 @@ local function noop() end
 --]]
 local function TruncateToTText(textFrame, name, maxWidth)
     if not textFrame or not name or name == "" then
-        if textFrame then textFrame:SetText("") end
+        if textFrame then
+            textFrame:SetText("")
+        end
         return ""
     end
-    
+
     -- First check if truncation is needed without setting text
     local tempText = name
     textFrame:SetText(tempText)
     local currentWidth = textFrame:GetStringWidth()
-    
+
     if currentWidth <= maxWidth then
         return name -- No truncation needed
     end
-    
+
     -- Binary search for optimal truncation point to minimize SetText calls
     local left, right = 1, string.len(name)
     local bestTruncated = name
-    
+
     while left <= right do
         local mid = math.floor((left + right) / 2)
         local testText = string.sub(name, 1, mid) .. "..."
         textFrame:SetText(testText)
         local testWidth = textFrame:GetStringWidth()
-        
+
         if testWidth <= maxWidth then
             bestTruncated = testText
             left = mid + 1
@@ -85,14 +133,18 @@ local function TruncateToTText(textFrame, name, maxWidth)
             right = mid - 1
         end
     end
-    
+
     return bestTruncated
 end
 
 -- Utility function to format large numbers with abbreviations (e.g., 12.3k, 1.4M)
 local function AbbreviateLargeNumbers(value)
-    if not value or type(value) ~= "number" then return "0" end
-    if value < 1000 then return tostring(value) end
+    if not value or type(value) ~= "number" then
+        return "0"
+    end
+    if value < 1000 then
+        return tostring(value)
+    end
 
     if value >= 1000000 then
         return string.format("%.1fM", value / 1000000)
@@ -113,7 +165,7 @@ end
 * @return string|table - Formatted text string or table with different format options
 --]]
 local function FormatStatusText(current, maximum, textFormat, useBreakup, frameType)
-    
+
     -- If useBreakup is nil, try to auto-detect the frame type
     if useBreakup == nil then
         if addon and addon.db and addon.db.profile and addon.db.profile.unitframe then
@@ -122,9 +174,9 @@ local function FormatStatusText(current, maximum, textFormat, useBreakup, frameT
             local targetHealth = UnitExists("target") and UnitHealth("target") or 0
             local focusHealth = UnitExists("focus") and UnitHealth("focus") or 0
             local petHealth = UnitExists("pet") and UnitHealth("pet") or 0
-            
+
             local frameType = "player" -- default
-            
+
             -- Check each frame type in order of specificity
             if current == focusHealth and current ~= playerHealth and current ~= targetHealth and focusHealth > 0 then
                 frameType = "focus"
@@ -144,16 +196,20 @@ local function FormatStatusText(current, maximum, textFormat, useBreakup, frameT
                     end
                 end
             end
-            
+
             local config = addon.db.profile.unitframe[frameType]
             useBreakup = config and config.breakUpLargeNumbers
-            if useBreakup == nil then useBreakup = false end
+            if useBreakup == nil then
+                useBreakup = false
+            end
         else
             useBreakup = false
         end
     end
-    
-    if not current or not maximum or maximum == 0 then return "" end
+
+    if not current or not maximum or maximum == 0 then
+        return ""
+    end
 
     local currentText, maxText
     if useBreakup then
@@ -163,9 +219,9 @@ local function FormatStatusText(current, maximum, textFormat, useBreakup, frameT
         currentText = tostring(current)
         maxText = tostring(maximum)
     end
-    
+
     local percent = math.floor((current / maximum) * 100)
-    
+
     if textFormat == "numeric" then
         return currentText
     elseif textFormat == "percentage" then
@@ -184,32 +240,68 @@ local function FormatStatusText(current, maximum, textFormat, useBreakup, frameT
     end
 end
 
--- Centralized refresh function
+-- =============================================================================
+-- MASTER REFRESH SYSTEM (RESTRUCTURED)
+-- =============================================================================
+
+-- 1. The single, master refresh function. This is the ONLY function that should be called
+--    when settings change or profiles are switched.
 function addon:RefreshUnitFrames()
-    if unitframe and unitframe.ApplySettings then
+    if not (PlayerFrame and TargetFrame) then
+        return
+    end
+
+    -- First, apply all position, scale, and override settings
+    if unitframe.ApplySettings then
         unitframe:ApplySettings()
     end
-    if unitframe and unitframe.UpdateAllTextDisplays then
-        unitframe.UpdateAllTextDisplays()
+
+    -- Second, re-style all frames with their respective textures and colors
+    unitframe.ChangePlayerframe()
+    unitframe.ChangeTargetFrame()
+    unitframe.ReApplyTargetFrame()
+    unitframe.ChangeStatusIcons()
+
+    if FocusFrame then
+        unitframe.ChangeFocusFrame()
+        unitframe.ReApplyFocusFrame()
+        unitframe.ChangeFocusToT()
+        if UnitExists('focustarget') then
+            unitframe.ReApplyFocusToTFrame()
+        end
     end
-    
-    -- Force update ToT and FoT colors when settings change
+
+    if PetFrame then
+        unitframe.ChangePetFrame()
+    end
+
+    unitframe.ChangeToT()
     if UnitExists('targettarget') then
         unitframe.ReApplyToTFrame()
     end
-    if UnitExists('focustarget') then
-        unitframe.ReApplyFocusToTFrame()
+
+    -- Third, refresh Party Frames layout and textures
+    if unitframe.PartyMoveFrame then
+        local partySettings = addon:GetConfigValue("unitframe", "party")
+        if partySettings then
+            unitframe:UpdatePartyState(partySettings)
+        end
+        unitframe.RefreshAllPartyFrames()
     end
-    
-    -- FIXED: Force update party frame colors and textures when settings change
-    unitframe.RefreshAllPartyFrames()
+
+    -- Finally, update all text displays according to the new settings
+    if unitframe.UpdateAllTextDisplays then
+        unitframe.UpdateAllTextDisplays()
+    end
 end
 
 -- FIXED: Function to clear target frame texts when target changes or disappears
 function unitframe.ClearTargetFrameTexts()
     local dragonFrame = _G["DragonUIUnitframeFrame"]
-    if not dragonFrame then return end
-    
+    if not dragonFrame then
+        return
+    end
+
     -- Clear health texts
     if dragonFrame.TargetFrameHealthBarText then
         dragonFrame.TargetFrameHealthBarText:SetText("")
@@ -223,7 +315,7 @@ function unitframe.ClearTargetFrameTexts()
         dragonFrame.TargetFrameHealthBarTextRight:SetText("")
         dragonFrame.TargetFrameHealthBarTextRight:Hide()
     end
-    
+
     -- Clear mana texts
     if dragonFrame.TargetFrameManaBarText then
         dragonFrame.TargetFrameManaBarText:SetText("")
@@ -242,8 +334,10 @@ end
 -- FIXED: Function to clear player frame texts when needed
 function unitframe.ClearPlayerFrameTexts()
     local dragonFrame = _G["DragonUIUnitframeFrame"]
-    if not dragonFrame then return end
-    
+    if not dragonFrame then
+        return
+    end
+
     -- Clear health texts
     if dragonFrame.PlayerFrameHealthBarText then
         dragonFrame.PlayerFrameHealthBarText:SetText("")
@@ -257,7 +351,7 @@ function unitframe.ClearPlayerFrameTexts()
         dragonFrame.PlayerFrameHealthBarTextRight:SetText("")
         dragonFrame.PlayerFrameHealthBarTextRight:Hide()
     end
-    
+
     -- Clear mana texts
     if dragonFrame.PlayerFrameManaBarText then
         dragonFrame.PlayerFrameManaBarText:SetText("")
@@ -271,14 +365,26 @@ function unitframe.ClearPlayerFrameTexts()
         dragonFrame.PlayerFrameManaBarTextRight:SetText("")
         dragonFrame.PlayerFrameManaBarTextRight:Hide()
     end
-    
+
     -- FIXED: Also hide Blizzard's default texts to prevent conflicts
-    if PlayerFrameHealthBarText then PlayerFrameHealthBarText:Hide() end
-    if PlayerFrameHealthBarTextLeft then PlayerFrameHealthBarTextLeft:Hide() end
-    if PlayerFrameHealthBarTextRight then PlayerFrameHealthBarTextRight:Hide() end
-    if PlayerFrameManaBarText then PlayerFrameManaBarText:Hide() end
-    if PlayerFrameManaBarTextLeft then PlayerFrameManaBarTextLeft:Hide() end
-    if PlayerFrameManaBarTextRight then PlayerFrameManaBarTextRight:Hide() end
+    if PlayerFrameHealthBarText then
+        PlayerFrameHealthBarText:Hide()
+    end
+    if PlayerFrameHealthBarTextLeft then
+        PlayerFrameHealthBarTextLeft:Hide()
+    end
+    if PlayerFrameHealthBarTextRight then
+        PlayerFrameHealthBarTextRight:Hide()
+    end
+    if PlayerFrameManaBarText then
+        PlayerFrameManaBarText:Hide()
+    end
+    if PlayerFrameManaBarTextLeft then
+        PlayerFrameManaBarTextLeft:Hide()
+    end
+    if PlayerFrameManaBarTextRight then
+        PlayerFrameManaBarTextRight:Hide()
+    end
 end
 
 ------------------------------------------
@@ -302,7 +408,7 @@ local localSettings = {}
 local function getDefaultStr(key, sub)
 
     local unitframeDefaults = addon.defaults and addon.defaults.profile and addon.defaults.profile.unitframe or {}
-    
+
     if sub and unitframeDefaults[sub] then
         local value = unitframeDefaults[sub][key]
         return '\n' .. '(Default: ' .. tostring(value) .. ')'
@@ -337,7 +443,7 @@ end
 local function getOption(info)
     local key = info[1]
     local sub = info[2]
-    
+
     if sub then
         return addon:GetConfigValue("unitframe", key, sub)
     else
@@ -345,48 +451,22 @@ local function getOption(info)
     end
 end
 
--- Function to save configuration changes and apply them immediately
--- @param info table - Configuration key path
--- @param value any - New configuration value to store
--- @return void - Updates settings and refreshes frames
 local function setOption(info, value)
     local key = info[1]
     local sub = info[2]
-    
+
     if sub then
         addon:SetConfigValue("unitframe", key, sub, value)
     else
         addon:SetConfigValue("unitframe", key, nil, value)
     end
-    unitframe:ApplySettings()
-    
-    -- Update frame text immediately when settings change
-    if key == "player" then
-        -- FIXED: Use selective update instead of SafeUpdatePlayerFrameText to avoid hover conflicts
-        local config = addon:GetConfigValue("unitframe", "player") or {}
-        unitframe.UpdatePlayerFrameTextSelective(config.showHealthTextAlways or false, config.showManaTextAlways or false)
-    elseif key == "target" then
-        -- FIXED: Simple approach like PlayerFrame - just call the selective update function
-        local config = addon:GetConfigValue("unitframe", "target") or {}
-        unitframe.UpdateTargetFrameTextSelective(config.showHealthTextAlways or false, config.showManaTextAlways or false)
-    elseif key == "tot" then
-        -- Target of Target configuration changes - only handle positioning and colors
-        unitframe.ChangeToT()
-    elseif key == "fot" then
-        -- Focus of Target configuration changes - only handle positioning and colors
-        unitframe.ChangeFocusToT()
-    elseif key == "pet" then
-        unitframe.UpdatePetFrameText()
-    elseif key == "party" then
-        local partySettings = addon:GetConfigValue("unitframe", "party")
-        if partySettings and unitframe.PartyMoveFrame then
-            unitframe:UpdatePartyState(partySettings)
-        end
-        -- Update party frame text immediately when settings change
-        for i = 1, 4 do
-            unitframe.UpdatePartyFrameText(i)
-        end
-    end
+
+    -- CRITICAL FIX: Call the single, master refresh function for ANY change.
+    -- This guarantees that all frames are updated consistently when any option
+    -- is changed from the settings panel.
+    addon:RefreshUnitFrames()
+
+    unitframe.UpdateSafeConfig()
 end
 
 -- Common definitions to reuse across all frame options
@@ -514,7 +594,7 @@ local function CreateUnitFrameOptions(frameName, frameDesc, unitKey)
             }
         }
     }
-    
+
     -- Add specific options for player and target frames only
     -- These options provide additional text display controls
     if unitKey == 'player' or unitKey == 'target' then
@@ -531,7 +611,7 @@ local function CreateUnitFrameOptions(frameName, frameDesc, unitKey)
             order = 15.4
         }
     end
-    
+
     return options
 end
 
@@ -678,6 +758,7 @@ local options = {
         focus = optionsFocus,
         player = optionsPlayer,
         target = optionsTarget,
+        pet = optionsPet,
         tot = optionsToT,
         fot = optionsFoT,
         party = optionsParty
@@ -687,7 +768,7 @@ local options = {
 function unitframe:Initialize()
     -- Module initialization adapted for DragonUI
     setDefaultValues()
-    
+
     -- Initialize the optimized texture system
     unitframe.InitializeOptimizedSystem()
 end
@@ -695,15 +776,15 @@ end
 function unitframe:OnEnable()
     -- Enable the module adapted for DragonUI
     -- Events are registered at the end of the file where the frame is defined
-    
+
     -- Initialization - save current settings and apply configurations
     unitframe:SaveLocalSettings()
     unitframe:ApplySettings()
-    
+
     -- Basic hooks (only the original ones)
     unitframe.HookFunctions()
     unitframe.HookDrag()
-    
+
     -- Hooks for persistent colors of target and focus frames
     unitframe.HookVertexColor()
     if unitframe.HookManaBarColors then
@@ -716,17 +797,24 @@ end
 
 function unitframe:SaveLocalSettings()
     -- Initialize localSettings tables if they don't exist
-    if not localSettings.player then localSettings.player = {} end
-    if not localSettings.target then localSettings.target = {} end
-    if not localSettings.focus then localSettings.focus = {} end
-    if not localSettings.party then localSettings.party = {} end
-    
+    if not localSettings.player then
+        localSettings.player = {}
+    end
+    if not localSettings.target then
+        localSettings.target = {}
+    end
+    if not localSettings.focus then
+        localSettings.focus = {}
+    end
+    if not localSettings.party then
+        localSettings.party = {}
+    end
+
     -- Save Player frame position and scale
     -- This captures the current state to be restored later if needed
     do
         local scale = PlayerFrame:GetScale()
         local point, relativeTo, relativePoint, xOfs, yOfs = PlayerFrame:GetPoint(1)
-
 
         local obj = localSettings.player
         obj.scale = scale
@@ -735,12 +823,11 @@ function unitframe:SaveLocalSettings()
         obj.x = xOfs
         obj.y = yOfs
     end
-    
+
     -- Save Target frame position and scale
     do
         local scale = TargetFrame:GetScale()
         local point, relativeTo, relativePoint, xOfs, yOfs = TargetFrame:GetPoint(1)
- 
 
         local obj = localSettings.target
         obj.scale = scale
@@ -749,13 +836,12 @@ function unitframe:SaveLocalSettings()
         obj.x = xOfs
         obj.y = yOfs
     end
-    
+
     -- Save Focus frame position and scale
     if true then
         do
             local scale = FocusFrame:GetScale()
             local point, relativeTo, relativePoint, xOfs, yOfs = FocusFrame:GetPoint(1)
-         
 
             local obj = localSettings.focus
             obj.scale = scale
@@ -766,7 +852,7 @@ function unitframe:SaveLocalSettings()
         end
     end
 
-    --DevTools_Dump({localSettings})
+    -- DevTools_Dump({localSettings})
 end
 
 function unitframe:ApplySettings()
@@ -776,15 +862,18 @@ function unitframe:ApplySettings()
     -- playerframe
     do
         local playerConfig = addon:GetConfigValue("unitframe", "player") or {}
-        -- Ensure player settings are initialized
-        if not localSettings.player then localSettings.player = {} end
+
+        -- FIXED: Define objLocal for the player frame, this was the source of the error.
+        if not localSettings.player then
+            localSettings.player = {}
+        end
         local objLocal = localSettings.player
-        -- Set defaults if missing
-        if not objLocal.anchor then objLocal.anchor = addon.defaults.profile.unitframe.player.anchor end
-        if not objLocal.anchorParent then objLocal.anchorParent = addon.defaults.profile.unitframe.player.anchorParent end
-        if not objLocal.x then objLocal.x = addon.defaults.profile.unitframe.player.x end
-        if not objLocal.y then objLocal.y = addon.defaults.profile.unitframe.player.y end
-        
+
+        -- ... (código de configuración del player sin cambios) ...
+        if not objLocal.y then
+            objLocal.y = addon.defaults.profile.unitframe.player.y
+        end
+
         if playerConfig.override then
             unitframe.MovePlayerFrame(playerConfig.anchor, playerConfig.anchorParent, playerConfig.x, playerConfig.y)
             PlayerFrame:SetUserPlaced(true)
@@ -797,7 +886,7 @@ function unitframe:ApplySettings()
             unitframe.MovePlayerFrame(anchor, anchorParent, x, y)
         end
         PlayerFrame:SetScale(playerConfig.scale or 1)
-        unitframe.ChangePlayerframe()
+        -- unitframe.ChangePlayerframe() -- REMOVED: Redundant call, RefreshUnitFrames handles this.
     end
 
     -- target
@@ -811,32 +900,40 @@ function unitframe:ApplySettings()
             scale = addon:GetConfigValue("unitframe", "target", "scale")
         }
         -- Ensure target settings are initialized
-        if not localSettings.target then localSettings.target = {} end
+        if not localSettings.target then
+            localSettings.target = {}
+        end
         local objLocal = localSettings.target
         -- Set defaults if missing
-        if not objLocal.anchor then objLocal.anchor = addon.defaults.profile.unitframe.target.anchor end
-        if not objLocal.anchorParent then objLocal.anchorParent = addon.defaults.profile.unitframe.target.anchorParent end
-        if not objLocal.x then objLocal.x = addon.defaults.profile.unitframe.target.x end
-        if not objLocal.y then objLocal.y = addon.defaults.profile.unitframe.target.y end
-        
+        if not objLocal.anchor then
+            objLocal.anchor = addon.defaults.profile.unitframe.target.anchor
+        end
+        if not objLocal.anchorParent then
+            objLocal.anchorParent = addon.defaults.profile.unitframe.target.anchorParent
+        end
+        if not objLocal.x then
+            objLocal.x = addon.defaults.profile.unitframe.target.x
+        end
+        if not objLocal.y then
+            objLocal.y = addon.defaults.profile.unitframe.target.y
+        end
+
         if obj.override then
             TargetFrame:SetMovable(1)
             TargetFrame:StartMoving()
             unitframe.MoveTargetFrame(obj.anchor, obj.anchorParent, obj.x, obj.y)
-            --TargetFrame:SetUserPlaced(true)
+            -- TargetFrame:SetUserPlaced(true)
             TargetFrame:StopMovingOrSizing()
             TargetFrame:SetMovable()
         else
             unitframe.MoveTargetFrame(objLocal.anchor, objLocal.anchorParent, objLocal.x, objLocal.y)
         end
         TargetFrame:SetScale(obj.scale)
-        unitframe.ReApplyTargetFrame()
-        
-        -- FIXED: Apply ToT settings using the improved functions
-        unitframe.ChangeToT()  -- This handles positioning, styling and colors
-        if UnitExists('targettarget') then
-            unitframe.ReApplyToTFrame()  -- This ensures colors and textures are applied
-        end
+        -- unitframe.ReApplyTargetFrame() -- REMOVED: Redundant call.
+        -- unitframe.ChangeToT() -- REMOVED: Redundant call.
+        -- if UnitExists('targettarget') then -- REMOVED: Redundant call.
+        --     unitframe.ReApplyToTFrame()
+        -- end
     end
 
     if true then
@@ -851,14 +948,24 @@ function unitframe:ApplySettings()
                 scale = addon:GetConfigValue("unitframe", "focus", "scale")
             }
             -- Ensure focus settings are initialized
-            if not localSettings.focus then localSettings.focus = {} end
+            if not localSettings.focus then
+                localSettings.focus = {}
+            end
             local objLocal = localSettings.focus
             -- Set defaults if missing
-            if not objLocal.anchor then objLocal.anchor = addon.defaults.profile.unitframe.focus.anchor end
-            if not objLocal.anchorParent then objLocal.anchorParent = addon.defaults.profile.unitframe.focus.anchorParent end
-            if not objLocal.x then objLocal.x = addon.defaults.profile.unitframe.focus.x end
-            if not objLocal.y then objLocal.y = addon.defaults.profile.unitframe.focus.y end
-            
+            if not objLocal.anchor then
+                objLocal.anchor = addon.defaults.profile.unitframe.focus.anchor
+            end
+            if not objLocal.anchorParent then
+                objLocal.anchorParent = addon.defaults.profile.unitframe.focus.anchorParent
+            end
+            if not objLocal.x then
+                objLocal.x = addon.defaults.profile.unitframe.focus.x
+            end
+            if not objLocal.y then
+                objLocal.y = addon.defaults.profile.unitframe.focus.y
+            end
+
             if obj.override then
                 unitframe.MoveFocusFrame(obj.anchor, obj.anchorParent, obj.x, obj.y)
                 FocusFrame:SetUserPlaced(true)
@@ -866,16 +973,14 @@ function unitframe:ApplySettings()
                 unitframe.MoveFocusFrame(objLocal.anchor, objLocal.anchorParent, objLocal.x, objLocal.y)
             end
             FocusFrame:SetScale(obj.scale)
-            unitframe.ReApplyFocusFrame()
-            
-            -- FIXED: Apply Focus ToT settings using the improved functions
-            unitframe.ChangeFocusToT()  -- This handles positioning, styling and colors
-            if UnitExists('focustarget') then
-                unitframe.ReApplyFocusToTFrame()  -- This ensures colors and textures are applied
-            end
+            -- unitframe.ReApplyFocusFrame() -- REMOVED: Redundant call.
+            -- unitframe.ChangeFocusToT() -- REMOVED: Redundant call.
+            -- if UnitExists('focustarget') then -- REMOVED: Redundant call.
+            --     unitframe.ReApplyFocusToTFrame()
+            -- end
         end
     end
-    
+
     -- TEMPORARILY DISABLED - Testing to find what broke player frame
     -- Update all text displays immediately after applying settings
     -- unitframe.UpdateAllTextDisplays()
@@ -887,56 +992,39 @@ function unitframe.UpdateAllTextDisplays()
     if not (addon and addon.db and addon.db.profile and addon.db.profile.unitframe) then
         return
     end
-    
+
     -- Get reference to the DragonUI frame that stores our custom text elements
     local dragonFrame = _G["DragonUIUnitframeFrame"]
     if not dragonFrame then
         return
     end
-    
+
     -- Update party frame texts (AÑADIDO)
     for i = 1, 4 do
         if _G['PartyMemberFrame' .. i] and UnitExists('party' .. i) then
             unitframe.UpdatePartyFrameText(i)
         end
     end
-    
-    -- FIXED: Helper function to check if mouse is over a frame
-    local function IsMouseOverFrame(frame)
-        if not frame then return false end
-        local mouseX, mouseY = GetCursorPosition()
-        local scale = frame:GetEffectiveScale()
-        mouseX = mouseX / scale
-        mouseY = mouseY / scale
-        
-        local left, bottom, width, height = frame:GetLeft(), frame:GetBottom(), frame:GetWidth(), frame:GetHeight()
-        if not (left and bottom and width and height) then return false end
-        
-        local right = left + width
-        local top = bottom + height
-        
-        return mouseX >= left and mouseX <= right and mouseY >= bottom and mouseY <= top
-    end
-    
+
     -- Update player frame custom texts based on individual settings
     if UnitExists('player') then
         local config = addon.db.profile.unitframe.player or {}
         local showHealthAlways = config.showHealthTextAlways or false
         local showManaAlways = config.showManaTextAlways or false
-        
+
         local health = UnitHealth('player') or 0
         local maxHealth = UnitHealthMax('player') or 1
         local power = UnitPower('player') or 0
         local maxPower = UnitPowerMax('player') or 1
-        
+
         local textFormat = config.textFormat or "both"
         local useBreakup = config.breakUpLargeNumbers or false
-        
+
         local healthText = FormatStatusText(health, maxHealth, textFormat, useBreakup)
         local powerText = FormatStatusText(power, maxPower, textFormat, useBreakup)
-        
+
         -- FIXED: NO hover detection in UpdateAllTextDisplays - only show if always enabled
-        
+
         -- Handle health text with dual elements for "both" format
         if textFormat == "both" and type(healthText) == "table" then
             -- Show left and right elements for dual display
@@ -978,7 +1066,7 @@ function unitframe.UpdateAllTextDisplays()
                 dragonFrame.PlayerFrameHealthBarTextRight:Hide()
             end
         end
-        
+
         -- Handle mana text with dual elements for "both" format
         if textFormat == "both" and type(powerText) == "table" then
             -- Show left and right elements for dual display
@@ -1021,30 +1109,30 @@ function unitframe.UpdateAllTextDisplays()
             end
         end
     end
-    
+
     -- Target frame is now handled exclusively by UpdateTargetFrameText() to avoid conflicts
-    
+
     -- Update focus frame custom texts based on individual settings
     if UnitExists('focus') then
         local config = addon.db.profile.unitframe.focus or {}
         local showHealthAlways = config.showHealthTextAlways or false
         local showManaAlways = config.showManaTextAlways or false
-        
+
         local health = UnitHealth('focus') or 0
         local maxHealth = UnitHealthMax('focus') or 1
         local power = UnitPower('focus') or 0
         local maxPower = UnitPowerMax('focus') or 1
-        
+
         local textFormat = config.textFormat or "both"
         local useBreakup = config.breakUpLargeNumbers or false
-        
+
         local healthText = FormatStatusText(health, maxHealth, textFormat, useBreakup)
         local powerText = FormatStatusText(power, maxPower, textFormat, useBreakup)
-        
+
         -- FIXED: Check if mouse is over focus frames
         local focusHealthHover = IsMouseOverFrame(dragonFrame.FocusFrameHealthBarDummy)
         local focusManaHover = IsMouseOverFrame(dragonFrame.FocusFrameManaBarDummy)
-        
+
         -- Handle health text with dual elements for "both" format
         if textFormat == "both" and type(healthText) == "table" then
             -- Show left and right elements for dual display
@@ -1086,7 +1174,7 @@ function unitframe.UpdateAllTextDisplays()
                 dragonFrame.FocusFrameHealthBarTextRight:Hide()
             end
         end
-        
+
         -- Handle mana text with dual elements for "both" format
         if textFormat == "both" and type(powerText) == "table" then
             -- Show left and right elements for dual display
@@ -1136,64 +1224,71 @@ function unitframe.UpdateTargetFrameText()
     if not (addon and addon.db and addon.db.profile and addon.db.profile.unitframe) then
         return
     end
-    
+
     -- Get reference to the DragonUI frame
     local dragonFrame = _G["DragonUIUnitframeFrame"]
     if not dragonFrame then
         return
     end
-    
+
     -- FIXED: Clear target frame texts if no target exists
     if not UnitExists('target') then
         unitframe.ClearTargetFrameTexts()
         return
     end
-    
-    local config = addon.db.profile.unitframe.target or {}
+
+    -- TAINT-FIX: Usar la caché segura.
+    local config = safeConfig.target or {}
     local showHealthAlways = config.showHealthTextAlways or false
     local showManaAlways = config.showManaTextAlways or false
     local textFormat = config.textFormat or "numeric"
     local useBreakup = config.breakUpLargeNumbers or false
-    
+
     -- FIXED: Improved hover detection function for specific bars
     local function IsMouseOverFrame(frame)
-        if not frame or not frame:IsVisible() then return false end
+        if not frame or not frame:IsVisible() then
+            return false
+        end
         local mouseX, mouseY = GetCursorPosition()
         local scale = frame:GetEffectiveScale()
-        if not scale or scale == 0 then return false end
+        if not scale or scale == 0 then
+            return false
+        end
         mouseX = mouseX / scale
         mouseY = mouseY / scale
-        
+
         local left, bottom, width, height = frame:GetLeft(), frame:GetBottom(), frame:GetWidth(), frame:GetHeight()
-        if not (left and bottom and width and height) then return false end
-        
+        if not (left and bottom and width and height) then
+            return false
+        end
+
         local right = left + width
         local top = bottom + height
-        
+
         return mouseX >= left and mouseX <= right and mouseY >= bottom and mouseY <= top
     end
-    
+
     -- FIXED: Specific hover detection for individual bars only
     local targetHealthHover = TargetFrameHealthBar and IsMouseOverFrame(TargetFrameHealthBar)
     local targetManaHover = TargetFrameManaBar and IsMouseOverFrame(TargetFrameManaBar)
-    
+
     -- Update health text
     if UnitExists('target') then
         local health = UnitHealth('target') or 0
         local maxHealth = UnitHealthMax('target') or 1
-        
+
         -- FIXED: When breakUpLargeNumbers is enabled, always use abbreviated format
         -- The issue was that hover detection was failing, so we simplify the logic
         local shouldUseBreakup = useBreakup
-        
+
         local healthText = FormatStatusText(health, maxHealth, textFormat, shouldUseBreakup)
-        
+
         if textFormat == "both" then
             -- Use dual text elements for "both" format - ONLY show Left/Right, NOT combined
             if dragonFrame.TargetFrameHealthBarTextLeft and dragonFrame.TargetFrameHealthBarTextRight then
                 dragonFrame.TargetFrameHealthBarTextLeft:SetText(healthText.percentage)
                 dragonFrame.TargetFrameHealthBarTextRight:SetText(healthText.current)
-                
+
                 if showHealthAlways or targetHealthHover then
                     dragonFrame.TargetFrameHealthBarTextLeft:Show()
                     dragonFrame.TargetFrameHealthBarTextRight:Show()
@@ -1201,7 +1296,7 @@ function unitframe.UpdateTargetFrameText()
                     dragonFrame.TargetFrameHealthBarTextLeft:Hide()
                     dragonFrame.TargetFrameHealthBarTextRight:Hide()
                 end
-                
+
                 -- FIXED: Hide the combined text element to avoid duplication in "both" format
                 if dragonFrame.TargetFrameHealthBarText then
                     dragonFrame.TargetFrameHealthBarText:Hide()
@@ -1212,14 +1307,14 @@ function unitframe.UpdateTargetFrameText()
             if dragonFrame.TargetFrameHealthBarText then
                 local displayText = type(healthText) == "table" and healthText.combined or healthText
                 dragonFrame.TargetFrameHealthBarText:SetText(displayText)
-                
+
                 if showHealthAlways or targetHealthHover then
                     dragonFrame.TargetFrameHealthBarText:Show()
                 else
                     dragonFrame.TargetFrameHealthBarText:Hide()
                 end
             end
-            
+
             -- Hide dual text elements
             if dragonFrame.TargetFrameHealthBarTextLeft then
                 dragonFrame.TargetFrameHealthBarTextLeft:Hide()
@@ -1229,24 +1324,24 @@ function unitframe.UpdateTargetFrameText()
             end
         end
     end
-    
+
     -- Update mana text
     if UnitExists('target') then
         local power = UnitPower('target') or 0
         local maxPower = UnitPowerMax('target') or 1
-        
+
         -- FIXED: When breakUpLargeNumbers is enabled, always use abbreviated format
         -- The issue was that hover detection was failing, so we simplify the logic
         local shouldUseBreakup = useBreakup
-        
+
         local powerText = FormatStatusText(power, maxPower, textFormat, shouldUseBreakup)
-        
+
         if textFormat == "both" then
             -- Use dual text elements for "both" format - ONLY show Left/Right, NOT combined
             if dragonFrame.TargetFrameManaBarTextLeft and dragonFrame.TargetFrameManaBarTextRight then
                 dragonFrame.TargetFrameManaBarTextLeft:SetText(powerText.percentage)
                 dragonFrame.TargetFrameManaBarTextRight:SetText(powerText.current)
-                
+
                 if showManaAlways or targetManaHover then
                     dragonFrame.TargetFrameManaBarTextLeft:Show()
                     dragonFrame.TargetFrameManaBarTextRight:Show()
@@ -1254,7 +1349,7 @@ function unitframe.UpdateTargetFrameText()
                     dragonFrame.TargetFrameManaBarTextLeft:Hide()
                     dragonFrame.TargetFrameManaBarTextRight:Hide()
                 end
-                
+
                 -- FIXED: Hide the combined text element to avoid duplication in "both" format
                 if dragonFrame.TargetFrameManaBarText then
                     dragonFrame.TargetFrameManaBarText:Hide()
@@ -1265,14 +1360,14 @@ function unitframe.UpdateTargetFrameText()
             if dragonFrame.TargetFrameManaBarText then
                 local displayText = type(powerText) == "table" and powerText.combined or powerText
                 dragonFrame.TargetFrameManaBarText:SetText(displayText)
-                
+
                 if showManaAlways or targetManaHover then
                     dragonFrame.TargetFrameManaBarText:Show()
                 else
                     dragonFrame.TargetFrameManaBarText:Hide()
                 end
             end
-            
+
             -- Hide dual text elements
             if dragonFrame.TargetFrameManaBarTextLeft then
                 dragonFrame.TargetFrameManaBarTextLeft:Hide()
@@ -1286,112 +1381,128 @@ end
 
 -- FIXED: Setup proper hover events for PlayerFrame to ensure consistent text display behavior
 function unitframe.SetupPlayerFrameHoverEvents()
-    if not PlayerFrame then return end
-    
+    if not PlayerFrame then
+        return
+    end
+
     -- Create invisible overlay frames for health and mana bars to capture mouse events
     if not PlayerFrame.DragonUIHealthHover then
         local healthHover = CreateFrame("Frame", nil, PlayerFrame)
         healthHover:SetAllPoints(PlayerFrameHealthBar)
         healthHover:EnableMouse(true)
         healthHover:SetFrameLevel(PlayerFrame:GetFrameLevel() + 10)
-        
+
         healthHover:SetScript("OnEnter", function()
             -- FIXED: Only show health text when hovering health bar
-            local config = addon.db and addon.db.profile and addon.db.profile.unitframe and addon.db.profile.unitframe.player
+            local config = addon.db and addon.db.profile and addon.db.profile.unitframe and
+                               addon.db.profile.unitframe.player
             if config then
                 unitframe.UpdatePlayerFrameTextSelective(true, config.showManaTextAlways or false)
             end
         end)
-        
+
         healthHover:SetScript("OnLeave", function()
             -- FIXED: Clear health text when leaving health bar (unless always shown)
-            local config = addon.db and addon.db.profile and addon.db.profile.unitframe and addon.db.profile.unitframe.player
+            local config = addon.db and addon.db.profile and addon.db.profile.unitframe and
+                               addon.db.profile.unitframe.player
             if config then
-                unitframe.UpdatePlayerFrameTextSelective(config.showHealthTextAlways or false, config.showManaTextAlways or false)
+                unitframe.UpdatePlayerFrameTextSelective(config.showHealthTextAlways or false,
+                    config.showManaTextAlways or false)
             end
         end)
-        
+
         PlayerFrame.DragonUIHealthHover = healthHover
     end
-    
+
     if not PlayerFrame.DragonUIManaHover then
         local manaHover = CreateFrame("Frame", nil, PlayerFrame)
         manaHover:SetAllPoints(PlayerFrameManaBar)
         manaHover:EnableMouse(true)
         manaHover:SetFrameLevel(PlayerFrame:GetFrameLevel() + 10)
-        
+
         manaHover:SetScript("OnEnter", function()
             -- FIXED: Only show mana text when hovering mana bar
-            local config = addon.db and addon.db.profile and addon.db.profile.unitframe and addon.db.profile.unitframe.player
+            local config = addon.db and addon.db.profile and addon.db.profile.unitframe and
+                               addon.db.profile.unitframe.player
             if config then
                 unitframe.UpdatePlayerFrameTextSelective(config.showHealthTextAlways or false, true)
             end
         end)
-        
+
         manaHover:SetScript("OnLeave", function()
             -- FIXED: Clear mana text when leaving mana bar (unless always shown)
-            local config = addon.db and addon.db.profile and addon.db.profile.unitframe and addon.db.profile.unitframe.player
+            local config = addon.db and addon.db.profile and addon.db.profile.unitframe and
+                               addon.db.profile.unitframe.player
             if config then
-                unitframe.UpdatePlayerFrameTextSelective(config.showHealthTextAlways or false, config.showManaTextAlways or false)
+                unitframe.UpdatePlayerFrameTextSelective(config.showHealthTextAlways or false,
+                    config.showManaTextAlways or false)
             end
         end)
-        
+
         PlayerFrame.DragonUIManaHover = manaHover
     end
 end
 
 -- Setup proper hover events for TargetFrame to ensure consistent text display behavior
 function unitframe.SetupTargetFrameHoverEvents()
-    if not TargetFrame then return end
-    
+    if not TargetFrame then
+        return
+    end
+
     -- Create invisible overlay frames for health and mana bars to capture mouse events
     if not TargetFrame.DragonUIHealthHover then
         local healthHover = CreateFrame("Frame", nil, TargetFrame)
         healthHover:SetAllPoints(TargetFrameHealthBar)
         healthHover:EnableMouse(true)
         healthHover:SetFrameLevel(TargetFrame:GetFrameLevel() + 10)
-        
+
         healthHover:SetScript("OnEnter", function()
             -- FIXED: Simple hover logic like PlayerFrame
-            local config = addon.db and addon.db.profile and addon.db.profile.unitframe and addon.db.profile.unitframe.target
+            local config = addon.db and addon.db.profile and addon.db.profile.unitframe and
+                               addon.db.profile.unitframe.target
             if config then
                 unitframe.UpdateTargetFrameTextSelective(true, config.showManaTextAlways or false)
             end
         end)
-        
+
         healthHover:SetScript("OnLeave", function()
             -- FIXED: Simple hover logic like PlayerFrame
-            local config = addon.db and addon.db.profile and addon.db.profile.unitframe and addon.db.profile.unitframe.target
+            local config = addon.db and addon.db.profile and addon.db.profile.unitframe and
+                               addon.db.profile.unitframe.target
             if config then
-                unitframe.UpdateTargetFrameTextSelective(config.showHealthTextAlways or false, config.showManaTextAlways or false)
+                unitframe.UpdateTargetFrameTextSelective(config.showHealthTextAlways or false,
+                    config.showManaTextAlways or false)
             end
         end)
-        
+
         TargetFrame.DragonUIHealthHover = healthHover
     end
-    
+
     if not TargetFrame.DragonUIManaHover then
         local manaHover = CreateFrame("Frame", nil, TargetFrame)
         manaHover:SetAllPoints(TargetFrameManaBar)
         manaHover:EnableMouse(true)
         manaHover:SetFrameLevel(TargetFrame:GetFrameLevel() + 10)
-        
+
         manaHover:SetScript("OnEnter", function()
             -- FIXED: Simple hover logic like PlayerFrame
-            local config = addon.db and addon.db.profile and addon.db.profile.unitframe and addon.db.profile.unitframe.target
+            local config = addon.db and addon.db.profile and addon.db.profile.unitframe and
+                               addon.db.profile.unitframe.target
             if config then
                 unitframe.UpdateTargetFrameTextSelective(config.showHealthTextAlways or false, true)
             end
         end)
-        
+
         manaHover:SetScript("OnLeave", function()
             -- FIXED: Simple hover logic like PlayerFrame
-            local config = addon.db and addon.db.profile and addon.db.profile.unitframe and addon.db.profile.unitframe.target
+            local config = addon.db and addon.db.profile and addon.db.profile.unitframe and
+                               addon.db.profile.unitframe.target
             if config then
-                unitframe.UpdateTargetFrameTextSelective(config.showHealthTextAlways or false, config.showManaTextAlways or false)
+                unitframe.UpdateTargetFrameTextSelective(config.showHealthTextAlways or false,
+                    config.showManaTextAlways or false)
             end
         end)
-        
+
         TargetFrame.DragonUIManaHover = manaHover
     end
 end
@@ -1401,30 +1512,30 @@ function unitframe.UpdateTargetFrameTextSelective(showHealth, showMana)
     if not (addon and addon.db and addon.db.profile and addon.db.profile.unitframe) then
         return
     end
-    
+
     -- Get reference to the DragonUI frame
     local dragonFrame = _G["DragonUIUnitframeFrame"]
     if not dragonFrame then
         return
     end
-    
+
     -- FIXED: Clear target frame texts if no target exists
     if not UnitExists('target') then
         unitframe.ClearTargetFrameTexts()
         return
     end
-    
+
     local config = addon.db.profile.unitframe.target or {}
     local textFormat = config.textFormat or "numeric"
     local useBreakup = config.breakUpLargeNumbers or false
-    
+
     -- Update health text only if requested
     if showHealth and UnitExists('target') then
         local health = UnitHealth('target') or 0
         local maxHealth = UnitHealthMax('target') or 1
-        
+
         local healthText = FormatStatusText(health, maxHealth, textFormat, useBreakup, "target")
-        
+
         if type(healthText) == "table" then
             -- Handle "both" format with percentage and current values - ONLY show Left/Right, NOT combined
             if dragonFrame.TargetFrameHealthBarTextLeft then
@@ -1465,14 +1576,14 @@ function unitframe.UpdateTargetFrameTextSelective(showHealth, showMana)
             dragonFrame.TargetFrameHealthBarTextRight:Hide()
         end
     end
-    
+
     -- Update mana text only if requested
     if showMana and UnitExists('target') then
         local power = UnitPower('target') or 0
         local maxPower = UnitPowerMax('target') or 1
-        
+
         local powerText = FormatStatusText(power, maxPower, textFormat, useBreakup, "target")
-        
+
         if type(powerText) == "table" then
             -- Handle "both" format with percentage and current values - ONLY show Left/Right, NOT combined
             if dragonFrame.TargetFrameManaBarTextLeft then
@@ -1520,37 +1631,44 @@ function unitframe.SafeUpdatePlayerFrameText()
     if not (addon and addon.db and addon.db.profile and addon.db.profile.unitframe) then
         return
     end
-    
-    local config = addon.db.profile.unitframe.player or {}
+
+    -- TAINT-FIX: Usar la caché segura.
+    local config = safeConfig.player or {}
     local showHealthAlways = config.showHealthTextAlways or false
     local showManaAlways = config.showManaTextAlways or false
-    
+
     -- FIXED: Improved hover detection for individual bars
     local function IsMouseOverFrame(frame)
-        if not frame or not frame:IsVisible() then return false end
+        if not frame or not frame:IsVisible() then
+            return false
+        end
         local mouseX, mouseY = GetCursorPosition()
         local scale = frame:GetEffectiveScale()
-        if not scale or scale == 0 then return false end
+        if not scale or scale == 0 then
+            return false
+        end
         mouseX = mouseX / scale
         mouseY = mouseY / scale
-        
+
         local left, bottom, width, height = frame:GetLeft(), frame:GetBottom(), frame:GetWidth(), frame:GetHeight()
-        if not (left and bottom and width and height) then return false end
-        
+        if not (left and bottom and width and height) then
+            return false
+        end
+
         local right = left + width
         local top = bottom + height
-        
+
         return mouseX >= left and mouseX <= right and mouseY >= bottom and mouseY <= top
     end
-    
+
     -- FIXED: Check hover state for individual bars ONLY (no general frame hover)
     local healthBarHover = PlayerFrameHealthBar and IsMouseOverFrame(PlayerFrameHealthBar) or false
     local manaBarHover = PlayerFrameManaBar and IsMouseOverFrame(PlayerFrameManaBar) or false
-    
+
     -- FIXED: Only show texts for specific bar hover or if always enabled
     local shouldShowHealth = showHealthAlways or healthBarHover
     local shouldShowMana = showManaAlways or manaBarHover
-    
+
     -- FIXED: Update texts individually based on hover state
     if shouldShowHealth or shouldShowMana then
         unitframe.UpdatePlayerFrameTextSelective(shouldShowHealth, shouldShowMana)
@@ -1565,24 +1683,24 @@ function unitframe.UpdatePlayerFrameTextSelective(showHealth, showMana)
     if not (addon and addon.db and addon.db.profile and addon.db.profile.unitframe) then
         return
     end
-    
+
     -- Get reference to the DragonUI frame
     local dragonFrame = _G["DragonUIUnitframeFrame"]
     if not dragonFrame then
         return
     end
-    
+
     local config = addon.db.profile.unitframe.player or {}
     local textFormat = config.textFormat or "numeric"
     local useBreakup = config.breakUpLargeNumbers or false
-    
+
     -- Update health text only if requested
     if showHealth and UnitExists('player') then
         local health = UnitHealth('player') or 0
         local maxHealth = UnitHealthMax('player') or 1
-        
+
         local healthText = FormatStatusText(health, maxHealth, textFormat, useBreakup, "player")
-        
+
         if type(healthText) == "table" then
             -- Handle "both" format with percentage and current values - ONLY show Left/Right, NOT combined
             if dragonFrame.PlayerFrameHealthBarTextLeft then
@@ -1628,14 +1746,14 @@ function unitframe.UpdatePlayerFrameTextSelective(showHealth, showMana)
             dragonFrame.PlayerFrameHealthBarTextRight:Hide()
         end
     end
-    
+
     -- Update mana text only if requested
     if showMana and UnitExists('player') then
-        local mana = UnitMana('player') or 0
-        local maxMana = UnitManaMax('player') or 1
-        
+        local mana = UnitPower('player') or 0 -- FIXED: Use UnitPower
+        local maxMana = UnitPowerMax('player') or 1 -- FIXED: Use UnitPowerMax
+
         local manaText = FormatStatusText(mana, maxMana, textFormat, useBreakup, "player")
-        
+
         if type(manaText) == "table" then
             -- Handle "both" format with percentage and current values - ONLY show Left/Right, NOT combined
             if dragonFrame.PlayerFrameManaBarTextLeft then
@@ -1685,287 +1803,106 @@ end
 
 -- FIXED: Define IsMouseOverFrame globally for pet frame usage
 function IsMouseOverFrame(frame)
-    if not frame or not frame:IsVisible() then return false end
+    if not frame or not frame:IsVisible() then
+        return false
+    end
     local mouseX, mouseY = GetCursorPosition()
     local scale = frame:GetEffectiveScale()
-    if not scale or scale == 0 then return false end
+    if not scale or scale == 0 then
+        return false
+    end
     mouseX = mouseX / scale
     mouseY = mouseY / scale
-    
+
     local left, bottom, width, height = frame:GetLeft(), frame:GetBottom(), frame:GetWidth(), frame:GetHeight()
-    if not (left and bottom and width and height) then return false end
-    
+    if not (left and bottom and width and height) then
+        return false
+    end
+
     local right = left + width
     local top = bottom + height
-    
+
     return mouseX >= left and mouseX <= right and mouseY >= bottom and mouseY <= top
 end
 
--- Function to update pet frame custom text displays
+-- FIXED: Enhanced UpdatePetFrameText function with full format support
 function unitframe.UpdatePetFrameText()
-    if not (addon and addon.db and addon.db.profile and addon.db.profile.unitframe) then
-        return
-    end
-    
-    -- Get reference to the DragonUI frame
+    if not (addon and addon.db and addon.db.profile and addon.db.profile.unitframe) then return end
     local dragonFrame = _G["DragonUIUnitframeFrame"]
-    if not dragonFrame then
+    if not dragonFrame then return end
+
+    if not UnitExists('pet') then
+        if dragonFrame.PetFrameHealthBarText then dragonFrame.PetFrameHealthBarText:Hide() end
+        if dragonFrame.PetFrameHealthBarTextLeft then dragonFrame.PetFrameHealthBarTextLeft:Hide() end
+        if dragonFrame.PetFrameHealthBarTextRight then dragonFrame.PetFrameHealthBarTextRight:Hide() end
+        if dragonFrame.PetFrameManaBarText then dragonFrame.PetFrameManaBarText:Hide() end
+        if dragonFrame.PetFrameManaBarTextLeft then dragonFrame.PetFrameManaBarTextLeft:Hide() end
+        if dragonFrame.PetFrameManaBarTextRight then dragonFrame.PetFrameManaBarTextRight:Hide() end
         return
     end
-    
-    -- Get pet frame configuration
+
     local config = addon.db.profile.unitframe.pet or {}
     local textFormat = config.textFormat or 'numeric'
     local useBreakup = config.breakUpLargeNumbers or false
     local showHealthAlways = config.showHealthTextAlways or false
     local showManaAlways = config.showManaTextAlways or false
-    
-    -- Check if mouse is over pet frame
-    local petHealthHover = PetFrame and IsMouseOverFrame(PetFrame)
-    local petManaHover = PetFrame and IsMouseOverFrame(PetFrame)
-    
-    -- Update health text
-    if UnitExists('pet') then
-        local health = UnitHealth('pet') or 0
-        local maxHealth = UnitHealthMax('pet') or 1
+
+    -- Use the same hover detection function as other frames
+    -- FIXED: Check if the dummy frames exist before checking for mouseover
+    local healthHover = dragonFrame.PetFrameHealthBarDummy and IsMouseOverFrame(dragonFrame.PetFrameHealthBarDummy) or false
+    local manaHover = dragonFrame.PetFrameManaBarDummy and IsMouseOverFrame(dragonFrame.PetFrameManaBarDummy) or false
+
+    local shouldShowHealth = showHealthAlways or healthHover
+    local shouldShowMana = showManaAlways or manaHover
+
+    -- Health Logic
+    if shouldShowHealth and UnitHealthMax('pet') > 0 then
+        local health, maxHealth = UnitHealth('pet'), UnitHealthMax('pet')
+        local healthText = FormatStatusText(health, maxHealth, textFormat, useBreakup, "pet")
         
-        if showHealthAlways or petHealthHover then
-            local healthText = FormatStatusText(health, maxHealth, textFormat, useBreakup, "pet")
-            
-            if textFormat == "both" and type(healthText) == "table" then
-                if dragonFrame.PetFrameHealthBarTextLeft and dragonFrame.PetFrameHealthBarTextRight then
-                    dragonFrame.PetFrameHealthBarTextLeft:SetText(healthText.percentage)
-                    dragonFrame.PetFrameHealthBarTextRight:SetText(healthText.current)
-                    dragonFrame.PetFrameHealthBarTextLeft:Show()
-                    dragonFrame.PetFrameHealthBarTextRight:Show()
-                end
-            else
-                if dragonFrame.PetFrameHealthBarText then
-                    dragonFrame.PetFrameHealthBarText:SetText(healthText)
-                    dragonFrame.PetFrameHealthBarText:Show()
-                end
-            end
+        if textFormat == "both" and type(healthText) == "table" then
+            if dragonFrame.PetFrameHealthBarTextLeft then dragonFrame.PetFrameHealthBarTextLeft:SetText(healthText.percentage); dragonFrame.PetFrameHealthBarTextLeft:Show() end
+            if dragonFrame.PetFrameHealthBarTextRight then dragonFrame.PetFrameHealthBarTextRight:SetText(healthText.current); dragonFrame.PetFrameHealthBarTextRight:Show() end
+            if dragonFrame.PetFrameHealthBarText then dragonFrame.PetFrameHealthBarText:Hide() end
         else
-            if textFormat == "both" then
-                if dragonFrame.PetFrameHealthBarTextLeft then dragonFrame.PetFrameHealthBarTextLeft:Hide() end
-                if dragonFrame.PetFrameHealthBarTextRight then dragonFrame.PetFrameHealthBarTextRight:Hide() end
-            else
-                if dragonFrame.PetFrameHealthBarText then dragonFrame.PetFrameHealthBarText:Hide() end
-            end
+            local displayText = type(healthText) == "table" and healthText.combined or healthText
+            if dragonFrame.PetFrameHealthBarText then dragonFrame.PetFrameHealthBarText:SetText(displayText); dragonFrame.PetFrameHealthBarText:Show() end
+            if dragonFrame.PetFrameHealthBarTextLeft then dragonFrame.PetFrameHealthBarTextLeft:Hide() end
+            if dragonFrame.PetFrameHealthBarTextRight then dragonFrame.PetFrameHealthBarTextRight:Hide() end
         end
+    else
+        if dragonFrame.PetFrameHealthBarText then dragonFrame.PetFrameHealthBarText:Hide() end
+        if dragonFrame.PetFrameHealthBarTextLeft then dragonFrame.PetFrameHealthBarTextLeft:Hide() end
+        if dragonFrame.PetFrameHealthBarTextRight then dragonFrame.PetFrameHealthBarTextRight:Hide() end
     end
-    
-    -- Update mana text
-    if UnitExists('pet') then
-        local power = UnitPower('pet') or 0
-        local maxPower = UnitPowerMax('pet') or 1
-        
-        if showManaAlways or petManaHover then
-            local powerText = FormatStatusText(power, maxPower, textFormat, useBreakup, "pet")
-            
-            if textFormat == "both" and type(powerText) == "table" then
-                if dragonFrame.PetFrameManaBarTextLeft and dragonFrame.PetFrameManaBarTextRight then
-                    dragonFrame.PetFrameManaBarTextLeft:SetText(powerText.percentage)
-                    dragonFrame.PetFrameManaBarTextRight:SetText(powerText.current)
-                    dragonFrame.PetFrameManaBarTextLeft:Show()
-                    dragonFrame.PetFrameManaBarTextRight:Show()
-                end
-            else
-                if dragonFrame.PetFrameManaBarText then
-                    dragonFrame.PetFrameManaBarText:SetText(powerText)
-                    dragonFrame.PetFrameManaBarText:Show()
-                end
-            end
+
+    -- Power Logic
+    if shouldShowMana and UnitPowerMax('pet') > 0 then
+        local power, maxPower = UnitPower('pet'), UnitPowerMax('pet')
+        local powerText = FormatStatusText(power, maxPower, textFormat, useBreakup, "pet")
+
+        if textFormat == "both" and type(powerText) == "table" then
+            if dragonFrame.PetFrameManaBarTextLeft then dragonFrame.PetFrameManaBarTextLeft:SetText(powerText.percentage); dragonFrame.PetFrameManaBarTextLeft:Show() end
+            if dragonFrame.PetFrameManaBarTextRight then dragonFrame.PetFrameManaBarTextRight:SetText(powerText.current); dragonFrame.PetFrameManaBarTextRight:Show() end
+            if dragonFrame.PetFrameManaBarText then dragonFrame.PetFrameManaBarText:Hide() end
         else
-            if textFormat == "both" then
-                if dragonFrame.PetFrameManaBarTextLeft then dragonFrame.PetFrameManaBarTextLeft:Hide() end
-                if dragonFrame.PetFrameManaBarTextRight then dragonFrame.PetFrameManaBarTextRight:Hide() end
-            else
-                if dragonFrame.PetFrameManaBarText then dragonFrame.PetFrameManaBarText:Hide() end
-            end
+            local displayText = type(powerText) == "table" and powerText.combined or powerText
+            if dragonFrame.PetFrameManaBarText then dragonFrame.PetFrameManaBarText:SetText(displayText); dragonFrame.PetFrameManaBarText:Show() end
+            if dragonFrame.PetFrameManaBarTextLeft then dragonFrame.PetFrameManaBarTextLeft:Hide() end
+            if dragonFrame.PetFrameManaBarTextRight then dragonFrame.PetFrameManaBarTextRight:Hide() end
         end
+    else
+        if dragonFrame.PetFrameManaBarText then dragonFrame.PetFrameManaBarText:Hide() end
+        if dragonFrame.PetFrameManaBarTextLeft then dragonFrame.PetFrameManaBarTextLeft:Hide() end
+        if dragonFrame.PetFrameManaBarTextRight then dragonFrame.PetFrameManaBarTextRight:Hide() end
     end
 end
 
--- Function to update player frame custom text displays - IMPROVED VERSION
-function unitframe.UpdatePlayerFrameText()
-    if not (addon and addon.db and addon.db.profile and addon.db.profile.unitframe) then
-        return
-    end
-    
-    -- Get reference to the DragonUI frame
-    local dragonFrame = _G["DragonUIUnitframeFrame"]
-    if not dragonFrame then
-        return
-    end
-    
-    local config = addon.db.profile.unitframe.player or {}
-    local showHealthAlways = config.showHealthTextAlways or false
-    local showManaAlways = config.showManaTextAlways or false
-    local textFormat = config.textFormat or "numeric"
-    local useBreakup = config.breakUpLargeNumbers or false
-    
-    -- FIXED: Improved hover detection function (same as target frame)
-    local function IsMouseOverFrame(frame)
-        if not frame or not frame:IsVisible() then return false end
-        local mouseX, mouseY = GetCursorPosition()
-        local scale = frame:GetEffectiveScale()
-        if not scale or scale == 0 then return false end
-        mouseX = mouseX / scale
-        mouseY = mouseY / scale
-        
-        local left, bottom, width, height = frame:GetLeft(), frame:GetBottom(), frame:GetWidth(), frame:GetHeight()
-        if not (left and bottom and width and height) then return false end
-        
-        local right = left + width
-        local top = bottom + height
-        
-        return mouseX >= left and mouseX <= right and mouseY >= bottom and mouseY <= top
-    end
-    
-    -- FIXED: Specific hover detection for individual bars only (no general frame hover)
-    local playerHealthHover = PlayerFrameHealthBar and IsMouseOverFrame(PlayerFrameHealthBar) or false
-    local playerManaHover = PlayerFrameManaBar and IsMouseOverFrame(PlayerFrameManaBar) or false
-    
-    -- FIXED: If neither text should be shown (always or hover) clear and exit
-    if not showHealthAlways and not showManaAlways and not playerHealthHover and not playerManaHover then
-        unitframe.ClearPlayerFrameTexts()
-        return
-    end
-    
-    
-    -- Update health text
-    if UnitExists('player') then
-        local health = UnitHealth('player') or 0
-        local maxHealth = UnitHealthMax('player') or 1
-        
-        -- FIXED: When breakUpLargeNumbers is enabled, always use abbreviated format
-        -- The issue was that hover detection was failing, so we simplify the logic
-        local shouldUseBreakup = useBreakup
-        
-        local healthText = FormatStatusText(health, maxHealth, textFormat, shouldUseBreakup)
-        
-        if textFormat == "both" then
-            -- Use dual text elements for "both" format
-            if dragonFrame.PlayerFrameHealthBarTextLeft and dragonFrame.PlayerFrameHealthBarTextRight then
-                dragonFrame.PlayerFrameHealthBarTextLeft:SetText(healthText.percentage)
-                dragonFrame.PlayerFrameHealthBarTextRight:SetText(healthText.current)
-                
-                if showHealthAlways or playerHealthHover then
-                    dragonFrame.PlayerFrameHealthBarTextLeft:Show()
-                    dragonFrame.PlayerFrameHealthBarTextRight:Show()
-                else
-                    dragonFrame.PlayerFrameHealthBarTextLeft:Hide()
-                    dragonFrame.PlayerFrameHealthBarTextRight:Hide()
-                end
-                
-                -- FIXED: Force hide Blizzard's default text when we don't want always show
-                if not showHealthAlways and not playerHealthHover then
-                    if PlayerFrameHealthBarText then PlayerFrameHealthBarText:Hide() end
-                    if PlayerFrameHealthBarTextLeft then PlayerFrameHealthBarTextLeft:Hide() end
-                    if PlayerFrameHealthBarTextRight then PlayerFrameHealthBarTextRight:Hide() end
-                end
-                
-                -- Hide the original single text element
-                if dragonFrame.PlayerFrameHealthBarText then
-                    dragonFrame.PlayerFrameHealthBarText:Hide()
-                end
-            end
-        else
-            -- Use single text element for other formats
-            if dragonFrame.PlayerFrameHealthBarText then
-                local displayText = type(healthText) == "table" and healthText.combined or healthText
-                dragonFrame.PlayerFrameHealthBarText:SetText(displayText)
-                
-                if showHealthAlways or playerHealthHover then
-                    dragonFrame.PlayerFrameHealthBarText:Show()
-                else
-                    dragonFrame.PlayerFrameHealthBarText:Hide()
-                end
-                
-                -- FIXED: Force hide Blizzard's default text when we don't want always show
-                if not showHealthAlways and not playerHealthHover then
-                    if PlayerFrameHealthBarText then PlayerFrameHealthBarText:Hide() end
-                    if PlayerFrameHealthBarTextLeft then PlayerFrameHealthBarTextLeft:Hide() end
-                    if PlayerFrameHealthBarTextRight then PlayerFrameHealthBarTextRight:Hide() end
-                end
-            end
-            
-            -- Hide dual text elements
-            if dragonFrame.PlayerFrameHealthBarTextLeft then
-                dragonFrame.PlayerFrameHealthBarTextLeft:Hide()
-            end
-            if dragonFrame.PlayerFrameHealthBarTextRight then
-                dragonFrame.PlayerFrameHealthBarTextRight:Hide()
-            end
-        end
-    end
-    
-    -- Update mana text
-    if UnitExists('player') then
-        local power = UnitPower('player') or 0
-        local maxPower = UnitPowerMax('player') or 1
-        
-        -- FIXED: When breakUpLargeNumbers is enabled, always use abbreviated format
-        -- The issue was that hover detection was failing, so we simplify the logic
-        local shouldUseBreakup = useBreakup
-        
-        local powerText = FormatStatusText(power, maxPower, textFormat, shouldUseBreakup)
-        
-        if textFormat == "both" then
-            -- Use dual text elements for "both" format
-            if dragonFrame.PlayerFrameManaBarTextLeft and dragonFrame.PlayerFrameManaBarTextRight then
-                dragonFrame.PlayerFrameManaBarTextLeft:SetText(powerText.percentage)
-                dragonFrame.PlayerFrameManaBarTextRight:SetText(powerText.current)
-                
-                if showManaAlways or playerManaHover then
-                    dragonFrame.PlayerFrameManaBarTextLeft:Show()
-                    dragonFrame.PlayerFrameManaBarTextRight:Show()
-                else
-                    dragonFrame.PlayerFrameManaBarTextLeft:Hide()
-                    dragonFrame.PlayerFrameManaBarTextRight:Hide()
-                end
-                
-                -- FIXED: Force hide Blizzard's default mana text when we don't want always show
-                if not showManaAlways and not playerManaHover then
-                    if PlayerFrameManaBarText then PlayerFrameManaBarText:Hide() end
-                    if PlayerFrameManaBarTextLeft then PlayerFrameManaBarTextLeft:Hide() end
-                    if PlayerFrameManaBarTextRight then PlayerFrameManaBarTextRight:Hide() end
-                end
-                
-                -- Hide the original single text element
-                if dragonFrame.PlayerFrameManaBarText then
-                    dragonFrame.PlayerFrameManaBarText:Hide()
-                end
-            end
-        else
-            -- Use single text element for other formats
-            if dragonFrame.PlayerFrameManaBarText then
-                local displayText = type(powerText) == "table" and powerText.combined or powerText
-                dragonFrame.PlayerFrameManaBarText:SetText(displayText)
-                
-                if showManaAlways or playerManaHover then
-                    dragonFrame.PlayerFrameManaBarText:Show()
-                else
-                    dragonFrame.PlayerFrameManaBarText:Hide()
-                end
-                
-                -- FIXED: Force hide Blizzard's default mana text when we don't want always show
-                if not showManaAlways and not playerManaHover then
-                    if PlayerFrameManaBarText then PlayerFrameManaBarText:Hide() end
-                    if PlayerFrameManaBarTextLeft then PlayerFrameManaBarTextLeft:Hide() end
-                    if PlayerFrameManaBarTextRight then PlayerFrameManaBarTextRight:Hide() end
-                end
-            end
-            
-            -- Hide dual text elements
-            if dragonFrame.PlayerFrameManaBarTextLeft then
-                dragonFrame.PlayerFrameManaBarTextLeft:Hide()
-            end
-            if dragonFrame.PlayerFrameManaBarTextRight then
-                dragonFrame.PlayerFrameManaBarTextRight:Hide()
-            end
-        end
+-- FIXED: Add refresh function for pet frame
+function addon:RefreshPetFrame()
+    if UnitExists("pet") then
+        unitframe.ChangePetFrame()
+        unitframe.UpdatePetFrameText()
     end
 end
 
@@ -1986,7 +1923,7 @@ function unitframe.MovePlayerTargetPreset(name)
         db.targetX = orig.targetX
         db.targetY = orig.targetY
 
-        unitframe:ApplySettings()
+        addon:RefreshUnitFrames()
     elseif name == 'CENTER' then
         local deltaX = 50
         local deltaY = 180
@@ -2005,7 +1942,7 @@ function unitframe.MovePlayerTargetPreset(name)
         db.targetX = 112 + deltaX
         db.targetY = -deltaY
 
-        unitframe:ApplySettings()
+        addon:RefreshUnitFrames()
     end
 end
 
@@ -2022,92 +1959,159 @@ local coordsCache = {}
 
 -- Initialize texture coordinates data inline (WoW 3.3.5a compatibility)
 local function initTextureCoords()
-    if TextureCoordinates.data then return end -- Already initialized
-    
+    if TextureCoordinates.data then
+        return
+    end -- Already initialized
+
     TextureCoordinates.data = {
         -- Target of Target coordinates from reference addon
-        ['UI-HUD-UnitFrame-TargetofTarget-PortraitOn'] = {120, 49, 0.0009765625, 0.1181640625, 0.8203125, 0.916015625, false, false},
-        ['UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Health'] = {70, 10, 0.921875, 0.990234375, 0.14453125, 0.1640625, false, false},
-        ['UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Health-Status'] = {70, 10, 0.91796875, 0.986328125, 0.3515625, 0.37109375, false, false},
-        ['UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Mana'] = {74, 7, 0.3876953125, 0.4599609375, 0.482421875, 0.49609375, false, false},
-        ['UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Mana-Status'] = {74, 7, 0.4619140625, 0.5341796875, 0.482421875, 0.49609375, false, false},
-        ['UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Energy'] = {74, 7, 0.91796875, 0.990234375, 0.37890625, 0.392578125, false, false},
-        ['UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Focus'] = {74, 7, 0.3134765625, 0.3857421875, 0.482421875, 0.49609375, false, false},
-        ['UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Rage'] = {74, 7, 0.5361328125, 0.6083984375, 0.482421875, 0.49609375, false, false},
-        ['UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-RunicPower'] = {74, 7, 0.6103515625, 0.6826171875, 0.482421875, 0.49609375, false, false},
+        ['UI-HUD-UnitFrame-TargetofTarget-PortraitOn'] = {120, 49, 0.0009765625, 0.1181640625, 0.8203125, 0.916015625,
+                                                          false, false},
+        ['UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Health'] = {70, 10, 0.921875, 0.990234375, 0.14453125,
+                                                                     0.1640625, false, false},
+        ['UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Health-Status'] = {70, 10, 0.91796875, 0.986328125, 0.3515625,
+                                                                            0.37109375, false, false},
+        ['UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Mana'] = {74, 7, 0.3876953125, 0.4599609375, 0.482421875,
+                                                                   0.49609375, false, false},
+        ['UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Mana-Status'] = {74, 7, 0.4619140625, 0.5341796875,
+                                                                          0.482421875, 0.49609375, false, false},
+        ['UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Energy'] = {74, 7, 0.91796875, 0.990234375, 0.37890625,
+                                                                     0.392578125, false, false},
+        ['UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Focus'] = {74, 7, 0.3134765625, 0.3857421875, 0.482421875,
+                                                                    0.49609375, false, false},
+        ['UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Rage'] = {74, 7, 0.5361328125, 0.6083984375, 0.482421875,
+                                                                   0.49609375, false, false},
+        ['UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-RunicPower'] = {74, 7, 0.6103515625, 0.6826171875, 0.482421875,
+                                                                         0.49609375, false, false},
         ['UI-HUD-UnitFrame-Player-Absorb-Edge'] = {8, 32, 0.984375, 0.9921875, 0.001953125, 0.064453125, false, false},
-        ['UI-HUD-UnitFrame-Player-CombatIcon'] = {16, 16, 0.9775390625, 0.9931640625, 0.259765625, 0.291015625, false, false},
-        ['UI-HUD-UnitFrame-Player-CombatIcon-Glow'] = {32, 32, 0.1494140625, 0.1806640625, 0.8203125, 0.8828125, false, false},
-        ['UI-HUD-UnitFrame-Player-Group-FriendOnlineIcon'] = {16, 16, 0.162109375, 0.177734375, 0.716796875, 0.748046875, false, false},
-        ['UI-HUD-UnitFrame-Player-Group-GuideIcon'] = {16, 16, 0.162109375, 0.177734375, 0.751953125, 0.783203125, false, false},
-        ['UI-HUD-UnitFrame-Player-Group-LeaderIcon'] = {16, 16, 0.1259765625, 0.1416015625, 0.919921875, 0.951171875, false, false},
-        ['UI-HUD-UnitFrame-Player-GroupIndicator'] = {71, 13, 0.927734375, 0.9970703125, 0.3125, 0.337890625, false, false},
+        ['UI-HUD-UnitFrame-Player-CombatIcon'] = {16, 16, 0.9775390625, 0.9931640625, 0.259765625, 0.291015625, false,
+                                                  false},
+        ['UI-HUD-UnitFrame-Player-CombatIcon-Glow'] = {32, 32, 0.1494140625, 0.1806640625, 0.8203125, 0.8828125, false,
+                                                       false},
+        ['UI-HUD-UnitFrame-Player-Group-FriendOnlineIcon'] = {16, 16, 0.162109375, 0.177734375, 0.716796875,
+                                                              0.748046875, false, false},
+        ['UI-HUD-UnitFrame-Player-Group-GuideIcon'] = {16, 16, 0.162109375, 0.177734375, 0.751953125, 0.783203125,
+                                                       false, false},
+        ['UI-HUD-UnitFrame-Player-Group-LeaderIcon'] = {16, 16, 0.1259765625, 0.1416015625, 0.919921875, 0.951171875,
+                                                        false, false},
+        ['UI-HUD-UnitFrame-Player-GroupIndicator'] = {71, 13, 0.927734375, 0.9970703125, 0.3125, 0.337890625, false,
+                                                      false},
         ['UI-HUD-UnitFrame-Player-PlayTimeTired'] = {29, 29, 0.1904296875, 0.21875, 0.505859375, 0.5625, false, false},
-        ['UI-HUD-UnitFrame-Player-PlayTimeUnhealthy'] = {29, 29, 0.1904296875, 0.21875, 0.56640625, 0.623046875, false, false},
-        ['UI-HUD-UnitFrame-Player-PortraitOff'] = {133, 51, 0.0009765625, 0.130859375, 0.716796875, 0.81640625, false, false},
-        ['UI-HUD-UnitFrame-Player-PortraitOff-Bar-Energy'] = {124, 10, 0.6708984375, 0.7919921875, 0.35546875, 0.375, false, false},
-        ['UI-HUD-UnitFrame-Player-PortraitOff-Bar-Focus'] = {124, 10, 0.6708984375, 0.7919921875, 0.37890625, 0.3984375, false, false},
-        ['UI-HUD-UnitFrame-Player-PortraitOff-Bar-Health'] = {126, 23, 0.0009765625, 0.1240234375, 0.919921875, 0.96484375, false, false},
-        ['UI-HUD-UnitFrame-Player-PortraitOff-Bar-Health-Status'] = {124, 20, 0.5478515625, 0.6689453125, 0.3125, 0.3515625, false, false},
-        ['UI-HUD-UnitFrame-Player-PortraitOff-Bar-Mana'] = {126, 12, 0.0009765625, 0.1240234375, 0.96875, 0.9921875, false, false},
-        ['UI-HUD-UnitFrame-Player-PortraitOff-Bar-Rage'] = {124, 10, 0.8203125, 0.94140625, 0.435546875, 0.455078125, false, false},
-        ['UI-HUD-UnitFrame-Player-PortraitOff-Bar-RunicPower'] = {124, 10, 0.1904296875, 0.3115234375, 0.458984375, 0.478515625, false, false},
+        ['UI-HUD-UnitFrame-Player-PlayTimeUnhealthy'] = {29, 29, 0.1904296875, 0.21875, 0.56640625, 0.623046875, false,
+                                                         false},
+        ['UI-HUD-UnitFrame-Player-PortraitOff'] = {133, 51, 0.0009765625, 0.130859375, 0.716796875, 0.81640625, false,
+                                                   false},
+        ['UI-HUD-UnitFrame-Player-PortraitOff-Bar-Energy'] = {124, 10, 0.6708984375, 0.7919921875, 0.35546875, 0.375,
+                                                              false, false},
+        ['UI-HUD-UnitFrame-Player-PortraitOff-Bar-Focus'] = {124, 10, 0.6708984375, 0.7919921875, 0.37890625, 0.3984375,
+                                                             false, false},
+        ['UI-HUD-UnitFrame-Player-PortraitOff-Bar-Health'] = {126, 23, 0.0009765625, 0.1240234375, 0.919921875,
+                                                              0.96484375, false, false},
+        ['UI-HUD-UnitFrame-Player-PortraitOff-Bar-Health-Status'] = {124, 20, 0.5478515625, 0.6689453125, 0.3125,
+                                                                     0.3515625, false, false},
+        ['UI-HUD-UnitFrame-Player-PortraitOff-Bar-Mana'] = {126, 12, 0.0009765625, 0.1240234375, 0.96875, 0.9921875,
+                                                            false, false},
+        ['UI-HUD-UnitFrame-Player-PortraitOff-Bar-Rage'] = {124, 10, 0.8203125, 0.94140625, 0.435546875, 0.455078125,
+                                                            false, false},
+        ['UI-HUD-UnitFrame-Player-PortraitOff-Bar-RunicPower'] = {124, 10, 0.1904296875, 0.3115234375, 0.458984375,
+                                                                  0.478515625, false, false},
         ['UI-HUD-UnitFrame-Player-PortraitOn'] = {198, 71, 0.7890625, 0.982421875, 0.001953125, 0.140625, false, false},
-        ['UI-HUD-UnitFrame-Player-PortraitOn-Bar-Energy'] = {124, 10, 0.3134765625, 0.4345703125, 0.458984375, 0.478515625, false, false},
-        ['UI-HUD-UnitFrame-Player-PortraitOn-Bar-Focus'] = {124, 10, 0.4365234375, 0.5576171875, 0.458984375, 0.478515625, false, false},
-        ['UI-HUD-UnitFrame-Player-PortraitOn-Bar-Health'] = {124, 20, 0.5478515625, 0.6689453125, 0.35546875, 0.39453125, false, false},
-        ['UI-HUD-UnitFrame-Player-PortraitOn-Bar-Health-Status'] = {124, 20, 0.6708984375, 0.7919921875, 0.3125, 0.3515625, false, false},
-        ['UI-HUD-UnitFrame-Player-PortraitOn-Bar-Mana'] = {124, 10, 0.5595703125, 0.6806640625, 0.458984375, 0.478515625, false, false},
-        ['UI-HUD-UnitFrame-Player-PortraitOn-Bar-Mana-Status'] = {124, 10, 0.6826171875, 0.8037109375, 0.458984375, 0.478515625, false, false},
-        ['UI-HUD-UnitFrame-Player-PortraitOn-Bar-Rage'] = {124, 10, 0.8056640625, 0.9267578125, 0.458984375, 0.478515625, false, false},
-        ['UI-HUD-UnitFrame-Player-PortraitOn-Bar-RunicPower'] = {124, 10, 0.1904296875, 0.3115234375, 0.482421875, 0.501953125, false, false},
-        ['UI-HUD-UnitFrame-Player-PortraitOn-CornerEmbellishment'] = {23, 23, 0.953125, 0.9755859375, 0.259765625, 0.3046875, false, false},
-        ['UI-HUD-UnitFrame-Player-PortraitOn-InCombat'] = {192, 71, 0.1943359375, 0.3818359375, 0.169921875, 0.30859375, false, false},
-        ['UI-HUD-UnitFrame-Player-PortraitOn-Status'] = {196, 71, 0.0009765625, 0.1923828125, 0.169921875, 0.30859375, false, false},
-        ['UI-HUD-UnitFrame-Player-PortraitOn-Vehicle'] = {202, 84, 0.0009765625, 0.1982421875, 0.001953125, 0.166015625, false, false},
-        ['UI-HUD-UnitFrame-Player-PortraitOn-Vehicle-InCombat'] = {198, 84, 0.3984375, 0.591796875, 0.001953125, 0.166015625, false, false},
-        ['UI-HUD-UnitFrame-Player-PortraitOn-Vehicle-Status'] = {201, 84, 0.2001953125, 0.396484375, 0.001953125, 0.166015625, false, false},
-        ['UI-HUD-UnitFrame-Player-PVP-AllianceIcon'] = {28, 41, 0.1201171875, 0.1474609375, 0.8203125, 0.900390625, false, false},
+        ['UI-HUD-UnitFrame-Player-PortraitOn-Bar-Energy'] = {124, 10, 0.3134765625, 0.4345703125, 0.458984375,
+                                                             0.478515625, false, false},
+        ['UI-HUD-UnitFrame-Player-PortraitOn-Bar-Focus'] = {124, 10, 0.4365234375, 0.5576171875, 0.458984375,
+                                                            0.478515625, false, false},
+        ['UI-HUD-UnitFrame-Player-PortraitOn-Bar-Health'] = {124, 20, 0.5478515625, 0.6689453125, 0.35546875,
+                                                             0.39453125, false, false},
+        ['UI-HUD-UnitFrame-Player-PortraitOn-Bar-Health-Status'] = {124, 20, 0.6708984375, 0.7919921875, 0.3125,
+                                                                    0.3515625, false, false},
+        ['UI-HUD-UnitFrame-Player-PortraitOn-Bar-Mana'] = {124, 10, 0.5595703125, 0.6806640625, 0.458984375,
+                                                           0.478515625, false, false},
+        ['UI-HUD-UnitFrame-Player-PortraitOn-Bar-Mana-Status'] = {124, 10, 0.6826171875, 0.8037109375, 0.458984375,
+                                                                  0.478515625, false, false},
+        ['UI-HUD-UnitFrame-Player-PortraitOn-Bar-Rage'] = {124, 10, 0.8056640625, 0.9267578125, 0.458984375,
+                                                           0.478515625, false, false},
+        ['UI-HUD-UnitFrame-Player-PortraitOn-Bar-RunicPower'] = {124, 10, 0.1904296875, 0.3115234375, 0.482421875,
+                                                                 0.501953125, false, false},
+        ['UI-HUD-UnitFrame-Player-PortraitOn-CornerEmbellishment'] = {23, 23, 0.953125, 0.9755859375, 0.259765625,
+                                                                      0.3046875, false, false},
+        ['UI-HUD-UnitFrame-Player-PortraitOn-InCombat'] = {192, 71, 0.1943359375, 0.3818359375, 0.169921875, 0.30859375,
+                                                           false, false},
+        ['UI-HUD-UnitFrame-Player-PortraitOn-Status'] = {196, 71, 0.0009765625, 0.1923828125, 0.169921875, 0.30859375,
+                                                         false, false},
+        ['UI-HUD-UnitFrame-Player-PortraitOn-Vehicle'] = {202, 84, 0.0009765625, 0.1982421875, 0.001953125, 0.166015625,
+                                                          false, false},
+        ['UI-HUD-UnitFrame-Player-PortraitOn-Vehicle-InCombat'] = {198, 84, 0.3984375, 0.591796875, 0.001953125,
+                                                                   0.166015625, false, false},
+        ['UI-HUD-UnitFrame-Player-PortraitOn-Vehicle-Status'] = {201, 84, 0.2001953125, 0.396484375, 0.001953125,
+                                                                 0.166015625, false, false},
+        ['UI-HUD-UnitFrame-Player-PVP-AllianceIcon'] = {28, 41, 0.1201171875, 0.1474609375, 0.8203125, 0.900390625,
+                                                        false, false},
         ['UI-HUD-UnitFrame-Player-PVP-FFAIcon'] = {28, 44, 0.1328125, 0.16015625, 0.716796875, 0.802734375, false, false},
-        ['UI-HUD-UnitFrame-Player-PVP-HordeIcon'] = {44, 44, 0.953125, 0.99609375, 0.169921875, 0.255859375, false, false},
-        ['UI-HUD-UnitFrame-Target-HighLevelTarget_Icon'] = {11, 14, 0.984375, 0.9951171875, 0.068359375, 0.095703125, false, false},
-        ['UI-HUD-UnitFrame-Target-MinusMob-PortraitOn'] = {192, 67, 0.57421875, 0.76171875, 0.169921875, 0.30078125, false, false},
-        ['UI-HUD-UnitFrame-Target-MinusMob-PortraitOn-Bar-Energy'] = {127, 10, 0.8544921875, 0.978515625, 0.412109375, 0.431640625, false, false},
-        ['UI-HUD-UnitFrame-Target-MinusMob-PortraitOn-Bar-Focus'] = {127, 10, 0.1904296875, 0.314453125, 0.435546875, 0.455078125, false, false},
-        ['UI-HUD-UnitFrame-Target-MinusMob-PortraitOn-Bar-Health'] = {125, 12, 0.7939453125, 0.916015625, 0.3515625, 0.375, false, false},
-        ['UI-HUD-UnitFrame-Target-MinusMob-PortraitOn-Bar-Health-Status'] = {125, 12, 0.7939453125, 0.916015625, 0.37890625, 0.40234375, false, false},
-        ['UI-HUD-UnitFrame-Target-MinusMob-PortraitOn-Bar-Mana'] = {127, 10, 0.31640625, 0.4404296875, 0.435546875, 0.455078125, false, false},
-        ['UI-HUD-UnitFrame-Target-MinusMob-PortraitOn-Bar-Mana-Status'] = {127, 10, 0.4423828125, 0.56640625, 0.435546875, 0.455078125, false, false},
-        ['UI-HUD-UnitFrame-Target-MinusMob-PortraitOn-Bar-Rage'] = {127, 10, 0.568359375, 0.6923828125, 0.435546875, 0.455078125, false, false},
-        ['UI-HUD-UnitFrame-Target-MinusMob-PortraitOn-Bar-RunicPower'] = {127, 10, 0.6943359375, 0.818359375, 0.435546875, 0.455078125, false, false},
-        ['UI-HUD-UnitFrame-Target-MinusMob-PortraitOn-InCombat'] = {188, 67, 0.0009765625, 0.1845703125, 0.447265625, 0.578125, false, false},
-        ['UI-HUD-UnitFrame-Target-MinusMob-PortraitOn-Status'] = {193, 69, 0.3837890625, 0.572265625, 0.169921875, 0.3046875, false, false},
-        ['UI-HUD-UnitFrame-Target-PortraitOn'] = {192, 67, 0.763671875, 0.951171875, 0.169921875, 0.30078125, false, false},
-        ['UI-HUD-UnitFrame-Target-PortraitOn-Bar-Energy'] = {134, 10, 0.7890625, 0.919921875, 0.14453125, 0.1640625, false, false},
-        ['UI-HUD-UnitFrame-Target-PortraitOn-Bar-Focus'] = {134, 10, 0.1904296875, 0.3212890625, 0.412109375, 0.431640625, false, false},
-        ['UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health'] = {126, 20, 0.4228515625, 0.5458984375, 0.3125, 0.3515625, false, false},
-        ['UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health-Status'] = {126, 20, 0.4228515625, 0.5458984375, 0.35546875, 0.39453125, false, false},
-        ['UI-HUD-UnitFrame-Target-PortraitOn-Bar-Mana'] = {134, 10, 0.3232421875, 0.4541015625, 0.412109375, 0.431640625, false, false},
-        ['UI-HUD-UnitFrame-Target-PortraitOn-Bar-Mana-Status'] = {134, 10, 0.4560546875, 0.5869140625, 0.412109375, 0.431640625, false, false},
-        ['UI-HUD-UnitFrame-Target-PortraitOn-Bar-Rage'] = {134, 10, 0.5888671875, 0.7197265625, 0.412109375, 0.431640625, false, false},
-        ['UI-HUD-UnitFrame-Target-PortraitOn-Bar-RunicPower'] = {134, 10, 0.7216796875, 0.8525390625, 0.412109375, 0.431640625, false, false},
-        ['UI-HUD-UnitFrame-Target-PortraitOn-InCombat'] = {188, 67, 0.0009765625, 0.1845703125, 0.58203125, 0.712890625, false, false},
-        ['UI-HUD-UnitFrame-Target-PortraitOn-Type'] = {135, 18, 0.7939453125, 0.92578125, 0.3125, 0.34765625, false, false},
-        ['UI-HUD-UnitFrame-Target-PortraitOn-Vehicle'] = {198, 81, 0.59375, 0.787109375, 0.001953125, 0.16015625, false, false},
-        ['UI-HUD-UnitFrame-Target-Rare-PortraitOn'] = {192, 67, 0.0009765625, 0.1884765625, 0.3125, 0.443359375, false, false}
+        ['UI-HUD-UnitFrame-Player-PVP-HordeIcon'] = {44, 44, 0.953125, 0.99609375, 0.169921875, 0.255859375, false,
+                                                     false},
+        ['UI-HUD-UnitFrame-Target-HighLevelTarget_Icon'] = {11, 14, 0.984375, 0.9951171875, 0.068359375, 0.095703125,
+                                                            false, false},
+        ['UI-HUD-UnitFrame-Target-MinusMob-PortraitOn'] = {192, 67, 0.57421875, 0.76171875, 0.169921875, 0.30078125,
+                                                           false, false},
+        ['UI-HUD-UnitFrame-Target-MinusMob-PortraitOn-Bar-Energy'] = {127, 10, 0.8544921875, 0.978515625, 0.412109375,
+                                                                      0.431640625, false, false},
+        ['UI-HUD-UnitFrame-Target-MinusMob-PortraitOn-Bar-Focus'] = {127, 10, 0.1904296875, 0.314453125, 0.435546875,
+                                                                     0.455078125, false, false},
+        ['UI-HUD-UnitFrame-Target-MinusMob-PortraitOn-Bar-Health'] = {125, 12, 0.7939453125, 0.916015625, 0.3515625,
+                                                                      0.375, false, false},
+        ['UI-HUD-UnitFrame-Target-MinusMob-PortraitOn-Bar-Health-Status'] = {125, 12, 0.7939453125, 0.916015625,
+                                                                             0.37890625, 0.40234375, false, false},
+        ['UI-HUD-UnitFrame-Target-MinusMob-PortraitOn-Bar-Mana'] = {127, 10, 0.31640625, 0.4404296875, 0.435546875,
+                                                                    0.455078125, false, false},
+        ['UI-HUD-UnitFrame-Target-MinusMob-PortraitOn-Bar-Mana-Status'] = {127, 10, 0.4423828125, 0.56640625,
+                                                                           0.435546875, 0.455078125, false, false},
+        ['UI-HUD-UnitFrame-Target-MinusMob-PortraitOn-Bar-Rage'] = {127, 10, 0.568359375, 0.6923828125, 0.435546875,
+                                                                    0.455078125, false, false},
+        ['UI-HUD-UnitFrame-Target-MinusMob-PortraitOn-Bar-RunicPower'] = {127, 10, 0.6943359375, 0.818359375,
+                                                                          0.435546875, 0.455078125, false, false},
+        ['UI-HUD-UnitFrame-Target-MinusMob-PortraitOn-InCombat'] = {188, 67, 0.0009765625, 0.1845703125, 0.447265625,
+                                                                    0.578125, false, false},
+        ['UI-HUD-UnitFrame-Target-MinusMob-PortraitOn-Status'] = {193, 69, 0.3837890625, 0.572265625, 0.169921875,
+                                                                  0.3046875, false, false},
+        ['UI-HUD-UnitFrame-Target-PortraitOn'] = {192, 67, 0.763671875, 0.951171875, 0.169921875, 0.30078125, false,
+                                                  false},
+        ['UI-HUD-UnitFrame-Target-PortraitOn-Bar-Energy'] = {134, 10, 0.7890625, 0.919921875, 0.14453125, 0.1640625,
+                                                             false, false},
+        ['UI-HUD-UnitFrame-Target-PortraitOn-Bar-Focus'] = {134, 10, 0.1904296875, 0.3212890625, 0.412109375,
+                                                            0.431640625, false, false},
+        ['UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health'] = {126, 20, 0.4228515625, 0.5458984375, 0.3125, 0.3515625,
+                                                             false, false},
+        ['UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health-Status'] = {126, 20, 0.4228515625, 0.5458984375, 0.35546875,
+                                                                    0.39453125, false, false},
+        ['UI-HUD-UnitFrame-Target-PortraitOn-Bar-Mana'] = {134, 10, 0.3232421875, 0.4541015625, 0.412109375,
+                                                           0.431640625, false, false},
+        ['UI-HUD-UnitFrame-Target-PortraitOn-Bar-Mana-Status'] = {134, 10, 0.4560546875, 0.5869140625, 0.412109375,
+                                                                  0.431640625, false, false},
+        ['UI-HUD-UnitFrame-Target-PortraitOn-Bar-Rage'] = {134, 10, 0.5888671875, 0.7197265625, 0.412109375,
+                                                           0.431640625, false, false},
+        ['UI-HUD-UnitFrame-Target-PortraitOn-Bar-RunicPower'] = {134, 10, 0.7216796875, 0.8525390625, 0.412109375,
+                                                                 0.431640625, false, false},
+        ['UI-HUD-UnitFrame-Target-PortraitOn-InCombat'] = {188, 67, 0.0009765625, 0.1845703125, 0.58203125, 0.712890625,
+                                                           false, false},
+        ['UI-HUD-UnitFrame-Target-PortraitOn-Type'] = {135, 18, 0.7939453125, 0.92578125, 0.3125, 0.34765625, false,
+                                                       false},
+        ['UI-HUD-UnitFrame-Target-PortraitOn-Vehicle'] = {198, 81, 0.59375, 0.787109375, 0.001953125, 0.16015625, false,
+                                                          false},
+        ['UI-HUD-UnitFrame-Target-Rare-PortraitOn'] = {192, 67, 0.0009765625, 0.1884765625, 0.3125, 0.443359375, false,
+                                                       false}
     }
 end
 
 function unitframe.GetCoords(key)
     -- Initialize texture coordinates if not done
     initTextureCoords()
-    
+
     -- Check cache first for performance
     if coordsCache[key] then
         local cached = coordsCache[key]
         return cached[1], cached[2], cached[3], cached[4]
     end
-    
+
     local data = TextureCoordinates.data and TextureCoordinates.data[key]
     if not data then
         -- Log missing coordinates for debugging
@@ -2117,16 +2121,16 @@ function unitframe.GetCoords(key)
         -- Return default coordinates to prevent crashes
         return 0, 1, 0, 1
     end
-    
+
     -- Validate data format
     if type(data) ~= "table" or #data < 6 then
 
         return 0, 1, 0, 1
     end
-    
+
     -- Extract texture coordinates (indices 3-6) and cache result
     local coords = {data[3], data[4], data[5], data[6]}
-    
+
     -- Validate coordinates are numbers
     for i, coord in ipairs(coords) do
         if type(coord) ~= "number" then
@@ -2134,7 +2138,7 @@ function unitframe.GetCoords(key)
             return 0, 1, 0, 1
         end
     end
-    
+
     coordsCache[key] = coords
     return coords[1], coords[2], coords[3], coords[4]
 end
@@ -2159,7 +2163,7 @@ local performanceCache = {
 --- Periodic maintenance function for performance optimization
 function unitframe.PerformanceMaintenance()
     local currentTime = GetTime()
-    
+
     -- Clear coordinate cache periodically to free memory
     if currentTime - performanceCache.lastCacheCleanup > performanceCache.cacheCleanupInterval then
         unitframe.ClearCoordsCache()
@@ -2171,27 +2175,24 @@ end
 function unitframe.InitializeOptimizedSystem()
     -- Initialize texture coordinates cache
     initTextureCoords()
-        
+
     -- Test a few key coordinates to ensure they work
-    local testKeys = {
-        'UI-HUD-UnitFrame-Player-PortraitOn',
-        'UI-HUD-UnitFrame-Target-PortraitOn',
-        'UI-HUD-UnitFrame-Player-Group-LeaderIcon'
-    }
-    
+    local testKeys = {'UI-HUD-UnitFrame-Player-PortraitOn', 'UI-HUD-UnitFrame-Target-PortraitOn',
+                      'UI-HUD-UnitFrame-Player-Group-LeaderIcon'}
+
     for _, key in ipairs(testKeys) do
         local left, top, right, bottom = unitframe.GetCoords(key)
         if left and top and right and bottom then
-           
+
         else
-           
+
         end
     end
 end
 
 function unitframe.CreatePlayerFrameTextures()
     local base = 'Interface\\Addons\\DragonUI\\Textures\\uiunitframe'
-    
+
     -- Get reference to the DragonUI frame
     local dragonFrame = _G["DragonUIUnitframeFrame"]
     if not dragonFrame then
@@ -2201,9 +2202,7 @@ function unitframe.CreatePlayerFrameTextures()
     if not dragonFrame.PlayerFrameBackground then
         local background = PlayerFrame:CreateTexture('DragonUIPlayerFrameBackground')
         background:SetDrawLayer('BACKGROUND', 2)
-        background:SetTexture(
-            'Interface\\Addons\\DragonUI\\Textures\\UI-HUD-UnitFrame-Player-PortraitOn-BACKGROUND'
-        )
+        background:SetTexture('Interface\\Addons\\DragonUI\\Textures\\UI-HUD-UnitFrame-Player-PortraitOn-BACKGROUND')
         background:SetPoint('LEFT', PlayerFrameHealthBar, 'LEFT', -67, -28.5)
 
         background:SetTexture(base)
@@ -2230,7 +2229,7 @@ function unitframe.CreatePlayerFrameTextures()
         local delta = 15
         textureSmall:SetPoint('CENTER', PlayerPortrait, 'CENTER', delta, -delta - 2)
         textureSmall:SetSize(23, 23)
-        --textureSmall:SetScale(1)
+        -- textureSmall:SetScale(1)
         dragonFrame.PlayerFrameDeco = textureSmall
     end
 
@@ -2247,7 +2246,7 @@ function unitframe.CreatePlayerFrameTextures()
         healthTextLeft:SetJustifyH("LEFT")
         dragonFrame.PlayerFrameHealthBarTextLeft = healthTextLeft
     end
-    
+
     if not dragonFrame.PlayerFrameHealthBarTextRight then
         local healthTextRight = PlayerFrameHealthBar:CreateFontString(nil, "OVERLAY", "TextStatusBarText")
         -- Set manually larger font size for health dual text while keeping base template
@@ -2259,7 +2258,7 @@ function unitframe.CreatePlayerFrameTextures()
         healthTextRight:SetJustifyH("RIGHT")
         dragonFrame.PlayerFrameHealthBarTextRight = healthTextRight
     end
-    
+
     -- Mana bar dual texts
     if not dragonFrame.PlayerFrameManaBarTextLeft then
         local manaTextLeft = PlayerFrameManaBar:CreateFontString(nil, "OVERLAY", "TextStatusBarText")
@@ -2267,7 +2266,7 @@ function unitframe.CreatePlayerFrameTextures()
         manaTextLeft:SetJustifyH("LEFT")
         dragonFrame.PlayerFrameManaBarTextLeft = manaTextLeft
     end
-    
+
     if not dragonFrame.PlayerFrameManaBarTextRight then
         local manaTextRight = PlayerFrameManaBar:CreateFontString(nil, "OVERLAY", "TextStatusBarText")
         manaTextRight:SetPoint("RIGHT", PlayerFrameManaBar, "RIGHT", -6, 0)
@@ -2291,13 +2290,13 @@ function unitframe.ChangeStatusIcons()
     PlayerAttackBackground:SetSize(32, 32)
 
     PlayerFrameGroupIndicator:ClearAllPoints()
-    --PlayerFrameGroupIndicator:SetPoint('BOTTOMRIGHT', PlayerFrameHealthBar, 'TOPRIGHT', 4, 13)
+    -- PlayerFrameGroupIndicator:SetPoint('BOTTOMRIGHT', PlayerFrameHealthBar, 'TOPRIGHT', 4, 13)
     PlayerFrameGroupIndicator:SetPoint('BOTTOM', PlayerName, 'TOP', 0, 0)
 
     PlayerLeaderIcon:SetTexture(base)
     PlayerLeaderIcon:SetTexCoord(unitframe.GetCoords('UI-HUD-UnitFrame-Player-Group-LeaderIcon'))
-    --PlayerLeaderIcon:ClearAllPoints()
-    --PlayerLeaderIcon:SetPoint('BOTTOM', PlayerName, 'TOP', 0, 0)
+    -- PlayerLeaderIcon:ClearAllPoints()
+    -- PlayerLeaderIcon:SetPoint('BOTTOM', PlayerName, 'TOP', 0, 0)
     PlayerLeaderIcon:ClearAllPoints()
     PlayerLeaderIcon:SetPoint('BOTTOMRIGHT', PlayerPortrait, 'TOPLEFT', 10, -10)
 
@@ -2317,7 +2316,7 @@ function unitframe.HookDrag()
         addon:SetConfigValue("unitframe", "player", "override", false)
     end
     PlayerFrame:HookScript('OnDragStop', DragStopPlayerFrame)
-    --hooksecurefunc('PlayerFrame_ResetUserPlacedPosition', DragStopPlayerFrame)
+    -- hooksecurefunc('PlayerFrame_ResetUserPlacedPosition', DragStopPlayerFrame)
 
     local DragStopTargetFrame = function(self)
         unitframe.SaveLocalSettings()
@@ -2328,7 +2327,7 @@ function unitframe.HookDrag()
         addon:SetConfigValue("unitframe", "target", "override", false)
     end
     TargetFrame:HookScript('OnDragStop', DragStopTargetFrame)
-    --hooksecurefunc('TargetFrame_ResetUserPlacedPosition', DragStopTargetFrame)
+    -- hooksecurefunc('TargetFrame_ResetUserPlacedPosition', DragStopTargetFrame)
 
     if true then
         local DragStopFocusFrame = function(self)
@@ -2340,102 +2339,85 @@ function unitframe.HookDrag()
             addon:SetConfigValue("unitframe", "focus", "override", false)
         end
         FocusFrame:HookScript('OnDragStop', DragStopFocusFrame)
-    --hooksecurefunc('FocusFrame_ResetUserPlacedPosition', DragStopFocusFrame)
+        -- hooksecurefunc('FocusFrame_ResetUserPlacedPosition', DragStopFocusFrame)
     end
 end
 
 function unitframe.HookVertexColor()
     -- Player frame health bar hook for persistent colors (ADDED TO FIX COLOR ISSUES)
-    PlayerFrameHealthBar:HookScript(
-        'OnValueChanged',
-        function(self)
-            if addon:GetConfigValue("unitframe", "player", "classcolor") then
-                PlayerFrameHealthBar:GetStatusBarTexture():SetTexture(
-                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Health-Status'
-                )
-                local localizedClass, englishClass, classIndex = UnitClass('player')
-                if RAID_CLASS_COLORS[englishClass] then
-                    PlayerFrameHealthBar:SetStatusBarColor(RAID_CLASS_COLORS[englishClass].r, RAID_CLASS_COLORS[englishClass].g, RAID_CLASS_COLORS[englishClass].b, 1)
-                end
-            else
-                PlayerFrameHealthBar:GetStatusBarTexture():SetTexture(
-                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Health'
-                )
-                PlayerFrameHealthBar:SetStatusBarColor(1, 1, 1, 1)
+    PlayerFrameHealthBar:HookScript('OnValueChanged', function(self)
+        if addon:GetConfigValue("unitframe", "player", "classcolor") then
+            PlayerFrameHealthBar:GetStatusBarTexture():SetTexture(
+                'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Health-Status')
+            local localizedClass, englishClass, classIndex = UnitClass('player')
+            if RAID_CLASS_COLORS[englishClass] then
+                PlayerFrameHealthBar:SetStatusBarColor(RAID_CLASS_COLORS[englishClass].r,
+                    RAID_CLASS_COLORS[englishClass].g, RAID_CLASS_COLORS[englishClass].b, 1)
             end
+        else
+            PlayerFrameHealthBar:GetStatusBarTexture():SetTexture(
+                'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Health')
+            PlayerFrameHealthBar:SetStatusBarColor(1, 1, 1, 1)
         end
-    )
+    end)
 
     -- FIXED: Player frame mana bar hook for persistent colors (fixes level up color reset)
-    PlayerFrameManaBar:HookScript(
-        'OnValueChanged',
-        function(self)
-            local powerType, powerTypeString = UnitPowerType('player')
-            
-            if powerTypeString == 'MANA' then
-                PlayerFrameManaBar:GetStatusBarTexture():SetTexture(
-                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Mana'
-                )
-            elseif powerTypeString == 'RAGE' then
-                PlayerFrameManaBar:GetStatusBarTexture():SetTexture(
-                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Rage'
-                )
-            elseif powerTypeString == 'FOCUS' then
-                PlayerFrameManaBar:GetStatusBarTexture():SetTexture(
-                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Focus'
-                )
-            elseif powerTypeString == 'ENERGY' then
-                PlayerFrameManaBar:GetStatusBarTexture():SetTexture(
-                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Energy'
-                )
-            elseif powerTypeString == 'RUNIC_POWER' then
-                PlayerFrameManaBar:GetStatusBarTexture():SetTexture(
-                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-RunicPower'
-                )
-            end
-            
-            -- Force white color to work with DragonUI textures
-            PlayerFrameManaBar:SetStatusBarColor(1, 1, 1, 1)
+    PlayerFrameManaBar:HookScript('OnValueChanged', function(self)
+        local powerType, powerTypeString = UnitPowerType('player')
+
+        if powerTypeString == 'MANA' then
+            PlayerFrameManaBar:GetStatusBarTexture():SetTexture(
+                'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Mana')
+        elseif powerTypeString == 'RAGE' then
+            PlayerFrameManaBar:GetStatusBarTexture():SetTexture(
+                'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Rage')
+        elseif powerTypeString == 'FOCUS' then
+            PlayerFrameManaBar:GetStatusBarTexture():SetTexture(
+                'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Focus')
+        elseif powerTypeString == 'ENERGY' then
+            PlayerFrameManaBar:GetStatusBarTexture():SetTexture(
+                'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Energy')
+        elseif powerTypeString == 'RUNIC_POWER' then
+            PlayerFrameManaBar:GetStatusBarTexture():SetTexture(
+                'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-RunicPower')
         end
-    )
+
+        -- Force white color to work with DragonUI textures
+        PlayerFrameManaBar:SetStatusBarColor(1, 1, 1, 1)
+    end)
 
     -- Target frame health bar hook for persistent colors
-    TargetFrameHealthBar:HookScript(
-        'OnValueChanged',
-        function(self)
-            if addon:GetConfigValue("unitframe", "target", "classcolor") and UnitIsPlayer('target') then
-                TargetFrameHealthBar:GetStatusBarTexture():SetTexture(
-                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health-Status'
-                )
-                local localizedClass, englishClass, classIndex = UnitClass('target')
-                TargetFrameHealthBar:SetStatusBarColor(RAID_CLASS_COLORS[englishClass].r, RAID_CLASS_COLORS[englishClass].g, RAID_CLASS_COLORS[englishClass].b, 1)
-            else
-                TargetFrameHealthBar:GetStatusBarTexture():SetTexture(
-                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health'
-                )
-                TargetFrameHealthBar:SetStatusBarColor(1, 1, 1, 1)
-            end
+    TargetFrameHealthBar:HookScript('OnValueChanged', function(self)
+        if addon:GetConfigValue("unitframe", "target", "classcolor") and UnitIsPlayer('target') then
+            TargetFrameHealthBar:GetStatusBarTexture():SetTexture(
+                'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health-Status')
+            local localizedClass, englishClass, classIndex = UnitClass('target')
+            TargetFrameHealthBar:SetStatusBarColor(RAID_CLASS_COLORS[englishClass].r, RAID_CLASS_COLORS[englishClass].g,
+                RAID_CLASS_COLORS[englishClass].b, 1)
+        else
+            TargetFrameHealthBar:GetStatusBarTexture():SetTexture(
+                'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health')
+            TargetFrameHealthBar:SetStatusBarColor(1, 1, 1, 1)
         end
-    )
+    end)
 
     -- Additional hooks for target health bar events to ensure colors persist
     local updateTargetFrameHealthBar = function()
         if addon:GetConfigValue("unitframe", "target", "classcolor") and UnitIsPlayer('target') then
             TargetFrameHealthBar:GetStatusBarTexture():SetTexture(
-                'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health-Status'
-            )
+                'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health-Status')
             local localizedClass, englishClass, classIndex = UnitClass('target')
             if RAID_CLASS_COLORS[englishClass] then
-                TargetFrameHealthBar:SetStatusBarColor(RAID_CLASS_COLORS[englishClass].r, RAID_CLASS_COLORS[englishClass].g, RAID_CLASS_COLORS[englishClass].b, 1)
+                TargetFrameHealthBar:SetStatusBarColor(RAID_CLASS_COLORS[englishClass].r,
+                    RAID_CLASS_COLORS[englishClass].g, RAID_CLASS_COLORS[englishClass].b, 1)
             end
         else
             TargetFrameHealthBar:GetStatusBarTexture():SetTexture(
-                'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health'
-            )
+                'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health')
             TargetFrameHealthBar:SetStatusBarColor(1, 1, 1, 1)
         end
     end
-    
+
     -- Hook target events for consistent color updates
     TargetFrame:HookScript('OnEvent', function(self, event, arg1)
         if event == 'PLAYER_TARGET_CHANGED' then
@@ -2448,48 +2430,43 @@ function unitframe.HookVertexColor()
         local updateFocusFrameHealthBar = function()
             if addon:GetConfigValue("unitframe", "focus", "classcolor") and UnitIsPlayer('focus') then
                 FocusFrameHealthBar:GetStatusBarTexture():SetTexture(
-                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health-Status'
-                )
+                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health-Status')
                 local localizedClass, englishClass, classIndex = UnitClass('focus')
                 if RAID_CLASS_COLORS[englishClass] then
-                    FocusFrameHealthBar:SetStatusBarColor(RAID_CLASS_COLORS[englishClass].r, RAID_CLASS_COLORS[englishClass].g, RAID_CLASS_COLORS[englishClass].b, 1)
+                    FocusFrameHealthBar:SetStatusBarColor(RAID_CLASS_COLORS[englishClass].r,
+                        RAID_CLASS_COLORS[englishClass].g, RAID_CLASS_COLORS[englishClass].b, 1)
                 end
             else
                 FocusFrameHealthBar:GetStatusBarTexture():SetTexture(
-                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health'
-                )
+                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health')
                 FocusFrameHealthBar:SetStatusBarColor(1, 1, 1, 1)
             end
             -- BORDER con sublevel bajo: por encima del fondo, por debajo de todo lo demás
             FocusFrameHealthBar:GetStatusBarTexture():SetDrawLayer("BORDER", 1)
         end
-        
+
         -- Hook focus events for consistent color updates  
         FocusFrame:HookScript('OnEvent', function(self, event, arg1)
             if event == 'PLAYER_FOCUS_CHANGED' then
                 updateFocusFrameHealthBar()
             end
         end)
-        
-        FocusFrameHealthBar:HookScript(
-            'OnValueChanged',
-            function(self)
-                if addon:GetConfigValue("unitframe", "focus", "classcolor") and UnitIsPlayer('focus') then
-                    FocusFrameHealthBar:GetStatusBarTexture():SetTexture(
-                        'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health-Status'
-                    )
-                    local localizedClass, englishClass, classIndex = UnitClass('focus')
-                    FocusFrameHealthBar:SetStatusBarColor(RAID_CLASS_COLORS[englishClass].r, RAID_CLASS_COLORS[englishClass].g, RAID_CLASS_COLORS[englishClass].b, 1)
-                else
-                    FocusFrameHealthBar:GetStatusBarTexture():SetTexture(
-                        'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health'
-                    )
-                    FocusFrameHealthBar:SetStatusBarColor(1, 1, 1, 1)
-                end
-                -- BORDER con sublevel bajo: por encima del fondo, por debajo de todo lo demás
-                FocusFrameHealthBar:GetStatusBarTexture():SetDrawLayer("BORDER", 1)
+
+        FocusFrameHealthBar:HookScript('OnValueChanged', function(self)
+            if addon:GetConfigValue("unitframe", "focus", "classcolor") and UnitIsPlayer('focus') then
+                FocusFrameHealthBar:GetStatusBarTexture():SetTexture(
+                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health-Status')
+                local localizedClass, englishClass, classIndex = UnitClass('focus')
+                FocusFrameHealthBar:SetStatusBarColor(RAID_CLASS_COLORS[englishClass].r,
+                    RAID_CLASS_COLORS[englishClass].g, RAID_CLASS_COLORS[englishClass].b, 1)
+            else
+                FocusFrameHealthBar:GetStatusBarTexture():SetTexture(
+                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health')
+                FocusFrameHealthBar:SetStatusBarColor(1, 1, 1, 1)
             end
-        )
+            -- BORDER con sublevel bajo: por encima del fondo, por debajo de todo lo demás
+            FocusFrameHealthBar:GetStatusBarTexture():SetDrawLayer("BORDER", 1)
+        end)
     end
 end
 
@@ -2498,44 +2475,38 @@ function unitframe.ForcePlayerFrameColors()
     -- Force health bar colors
     if addon:GetConfigValue("unitframe", "player", "classcolor") then
         PlayerFrameHealthBar:GetStatusBarTexture():SetTexture(
-            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Health-Status'
-        )
+            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Health-Status')
         local localizedClass, englishClass, classIndex = UnitClass('player')
         if RAID_CLASS_COLORS[englishClass] then
-            PlayerFrameHealthBar:SetStatusBarColor(RAID_CLASS_COLORS[englishClass].r, RAID_CLASS_COLORS[englishClass].g, RAID_CLASS_COLORS[englishClass].b, 1)
+            PlayerFrameHealthBar:SetStatusBarColor(RAID_CLASS_COLORS[englishClass].r, RAID_CLASS_COLORS[englishClass].g,
+                RAID_CLASS_COLORS[englishClass].b, 1)
         end
     else
         PlayerFrameHealthBar:GetStatusBarTexture():SetTexture(
-            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Health'
-        )
+            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Health')
         PlayerFrameHealthBar:SetStatusBarColor(1, 1, 1, 1)
     end
-    
+
     -- Force mana bar colors
     local powerType, powerTypeString = UnitPowerType('player')
-    
+
     if powerTypeString == 'MANA' then
         PlayerFrameManaBar:GetStatusBarTexture():SetTexture(
-            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Mana'
-        )
+            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Mana')
     elseif powerTypeString == 'RAGE' then
         PlayerFrameManaBar:GetStatusBarTexture():SetTexture(
-            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Rage'
-        )
+            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Rage')
     elseif powerTypeString == 'FOCUS' then
         PlayerFrameManaBar:GetStatusBarTexture():SetTexture(
-            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Focus'
-        )
+            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Focus')
     elseif powerTypeString == 'ENERGY' then
         PlayerFrameManaBar:GetStatusBarTexture():SetTexture(
-            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Energy'
-        )
+            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Energy')
     elseif powerTypeString == 'RUNIC_POWER' then
         PlayerFrameManaBar:GetStatusBarTexture():SetTexture(
-            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-RunicPower'
-        )
+            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-RunicPower')
     end
-    
+
     -- Force white color to work with DragonUI textures
     PlayerFrameManaBar:SetStatusBarColor(1, 1, 1, 1)
 end
@@ -2570,15 +2541,14 @@ function unitframe.ChangePlayerframe()
 
     if addon:GetConfigValue("unitframe", "player", "classcolor") then
         PlayerFrameHealthBar:GetStatusBarTexture():SetTexture(
-            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Health-Status'
-        )
+            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Health-Status')
 
         local localizedClass, englishClass, classIndex = UnitClass('player')
-        PlayerFrameHealthBar:SetStatusBarColor(RAID_CLASS_COLORS[englishClass].r, RAID_CLASS_COLORS[englishClass].g, RAID_CLASS_COLORS[englishClass].b, 1)
+        PlayerFrameHealthBar:SetStatusBarColor(RAID_CLASS_COLORS[englishClass].r, RAID_CLASS_COLORS[englishClass].g,
+            RAID_CLASS_COLORS[englishClass].b, 1)
     else
         PlayerFrameHealthBar:GetStatusBarTexture():SetTexture(
-            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Health'
-        )
+            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Health')
         PlayerFrameHealthBar:SetStatusBarColor(1, 1, 1, 1)
     end
 
@@ -2587,8 +2557,8 @@ function unitframe.ChangePlayerframe()
     PlayerFrameHealthBarText:SetPoint('CENTER', PlayerFrameHealthBar, 'CENTER', 0, 0)
 
     local dx = 5
-    --PlayerFrameHealthBarTextLeft:SetPoint('LEFT', PlayerFrameHealthBar, 'LEFT', dx, 0)
-    --PlayerFrameHealthBarTextRight:SetPoint('RIGHT', PlayerFrameHealthBar, 'RIGHT', -dx, 0)
+    -- PlayerFrameHealthBarTextLeft:SetPoint('LEFT', PlayerFrameHealthBar, 'LEFT', dx, 0)
+    -- PlayerFrameHealthBarTextRight:SetPoint('RIGHT', PlayerFrameHealthBar, 'RIGHT', -dx, 0)
 
     -- Mana 119,12
     PlayerFrameManaBar:ClearAllPoints()
@@ -2598,48 +2568,43 @@ function unitframe.ChangePlayerframe()
     -- Hide original Blizzard mana text - we use custom ones
     PlayerFrameManaBarText:Hide()
     PlayerFrameManaBarText:SetPoint('CENTER', PlayerFrameManaBar, 'CENTER', 0, 0)
-    --PlayerFrameManaBarTextLeft:SetPoint('LEFT', PlayerFrameManaBar, 'LEFT', dx, 0)
-    --PlayerFrameManaBarTextRight:SetPoint('RIGHT', PlayerFrameManaBar, 'RIGHT', -dx, 0)
+    -- PlayerFrameManaBarTextLeft:SetPoint('LEFT', PlayerFrameManaBar, 'LEFT', dx, 0)
+    -- PlayerFrameManaBarTextRight:SetPoint('RIGHT', PlayerFrameManaBar, 'RIGHT', -dx, 0)
 
     local powerType, powerTypeString = UnitPowerType('player')
 
     if powerTypeString == 'MANA' then
         PlayerFrameManaBar:GetStatusBarTexture():SetTexture(
-            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Mana'
-        )
+            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Mana')
     elseif powerTypeString == 'RAGE' then
         PlayerFrameManaBar:GetStatusBarTexture():SetTexture(
-            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Rage'
-        )
+            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Rage')
     elseif powerTypeString == 'FOCUS' then
         PlayerFrameManaBar:GetStatusBarTexture():SetTexture(
-            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Focus'
-        )
+            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Focus')
     elseif powerTypeString == 'ENERGY' then
         PlayerFrameManaBar:GetStatusBarTexture():SetTexture(
-            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Energy'
-        )
+            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Energy')
     elseif powerTypeString == 'RUNIC_POWER' then
         PlayerFrameManaBar:GetStatusBarTexture():SetTexture(
-            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-RunicPower'
-        )
+            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-RunicPower')
     end
 
     PlayerFrameManaBar:SetStatusBarColor(1, 1, 1, 1)
 
-    --UI-HUD-UnitFrame-Player-PortraitOn-Status
+    -- UI-HUD-UnitFrame-Player-PortraitOn-Status
     PlayerStatusTexture:SetTexture(base)
     PlayerStatusTexture:SetSize(192, 71)
     PlayerStatusTexture:SetTexCoord(unitframe.GetCoords('UI-HUD-UnitFrame-Player-PortraitOn-InCombat'))
 
     PlayerStatusTexture:ClearAllPoints()
-    
+
     -- Get reference to the DragonUI frame for PlayerFrameBorder
     local dragonFrame = _G["DragonUIUnitframeFrame"]
     if dragonFrame and dragonFrame.PlayerFrameBorder then
         PlayerStatusTexture:SetPoint('TOPLEFT', dragonFrame.PlayerFrameBorder, 'TOPLEFT', 1, 1)
     end
-    
+
     -- Create custom health text for player frame (similar to target/focus)
     if not dragonFrame.PlayerFrameHealthBarText then
         local PlayerFrameHealthBarDummy = CreateFrame('FRAME', 'PlayerFrameHealthBarDummy')
@@ -2654,7 +2619,8 @@ function unitframe.ChangePlayerframe()
 
         dragonFrame.PlayerFrameHealthBarDummy = PlayerFrameHealthBarDummy
 
-        local t = PlayerFrameHealthBarDummy:CreateFontString('PlayerFrameCustomHealthBarText', 'OVERLAY', 'TextStatusBarText')
+        local t = PlayerFrameHealthBarDummy:CreateFontString('PlayerFrameCustomHealthBarText', 'OVERLAY',
+            'TextStatusBarText')
         -- Set manually larger font size for health text while keeping base template
         local font, originalSize, flags = t:GetFont()
         if font and originalSize then
@@ -2667,17 +2633,19 @@ function unitframe.ChangePlayerframe()
 
         local function UpdatePlayerCustomHealthText()
             local dragonFrame = _G["DragonUIUnitframeFrame"]
-            if not dragonFrame then return end
-            
+            if not dragonFrame then
+                return
+            end
+
             if addon and addon.db and addon.db.profile and addon.db.profile.unitframe then
                 local config = addon.db.profile.unitframe.player or {}
                 local textFormat = config.textFormat or "numeric"
-                
+
                 if UnitExists('player') then
                     local current = UnitHealth('player') or 0
                     local maximum = UnitHealthMax('player') or 1
                     local formattedText = FormatStatusText(current, maximum, textFormat)
-                    
+
                     if textFormat == "both" and type(formattedText) == "table" then
                         -- Update dual text elements
                         if dragonFrame.PlayerFrameHealthBarTextLeft then
@@ -2703,7 +2671,7 @@ function unitframe.ChangePlayerframe()
                 local config = addon.db.profile.unitframe.player or {}
                 local showHealthAlways = config.showHealthTextAlways or false
                 local textFormat = config.textFormat or "numeric"
-                
+
                 if not showHealthAlways then
                     if textFormat == "both" then
                         -- Show dual text elements for "both" format
@@ -2720,14 +2688,14 @@ function unitframe.ChangePlayerframe()
                 end
             end
         end)
-        
+
         PlayerFrameHealthBarDummy:HookScript('OnLeave', function(self)
             local dragonFrame = _G["DragonUIUnitframeFrame"]
             if dragonFrame and addon and addon.db and addon.db.profile and addon.db.profile.unitframe then
                 local config = addon.db.profile.unitframe.player or {}
                 local showHealthAlways = config.showHealthTextAlways or false
                 local textFormat = config.textFormat or "numeric"
-                
+
                 if not showHealthAlways then
                     if textFormat == "both" then
                         -- Hide dual text elements for "both" format
@@ -2758,7 +2726,8 @@ function unitframe.ChangePlayerframe()
 
         dragonFrame.PlayerFrameManaBarDummy = PlayerFrameManaBarDummy
 
-        local t = PlayerFrameManaBarDummy:CreateFontString('PlayerFrameCustomManaBarText', 'OVERLAY', 'TextStatusBarText')
+        local t = PlayerFrameManaBarDummy:CreateFontString('PlayerFrameCustomManaBarText', 'OVERLAY',
+            'TextStatusBarText')
         t:SetPoint('CENTER', PlayerFrameManaBarDummy, 0, 0)
         t:SetText('MANA')
         t:Hide()
@@ -2766,17 +2735,19 @@ function unitframe.ChangePlayerframe()
 
         local function UpdatePlayerCustomManaText()
             local dragonFrame = _G["DragonUIUnitframeFrame"]
-            if not dragonFrame then return end
-            
+            if not dragonFrame then
+                return
+            end
+
             if addon and addon.db and addon.db.profile and addon.db.profile.unitframe then
                 local config = addon.db.profile.unitframe.player or {}
                 local textFormat = config.textFormat or "numeric"
-                
+
                 if UnitExists('player') then
                     local currentMana = UnitPower('player') or 0
                     local maximumMana = UnitPowerMax('player') or 1
                     local formattedText = FormatStatusText(currentMana, maximumMana, textFormat)
-                    
+
                     if textFormat == "both" and type(formattedText) == "table" then
                         -- Update dual text elements
                         if dragonFrame.PlayerFrameManaBarTextLeft then
@@ -2802,7 +2773,7 @@ function unitframe.ChangePlayerframe()
                 local config = addon.db.profile.unitframe.player or {}
                 local showManaAlways = config.showManaTextAlways or false
                 local textFormat = config.textFormat or "numeric"
-                
+
                 if not showManaAlways then
                     if textFormat == "both" then
                         -- Show dual text elements for "both" format
@@ -2819,14 +2790,14 @@ function unitframe.ChangePlayerframe()
                 end
             end
         end)
-        
+
         PlayerFrameManaBarDummy:HookScript('OnLeave', function(self)
             local dragonFrame = _G["DragonUIUnitframeFrame"]
             if dragonFrame and addon and addon.db and addon.db.profile and addon.db.profile.unitframe then
                 local config = addon.db.profile.unitframe.player or {}
                 local showManaAlways = config.showManaTextAlways or false
                 local textFormat = config.textFormat or "numeric"
-                
+
                 if not showManaAlways then
                     if textFormat == "both" then
                         -- Hide dual text elements for "both" format
@@ -2842,20 +2813,20 @@ function unitframe.ChangePlayerframe()
             end
         end)
     end
-    
+
     -- Update visibility based on individual showTextAlways settings for Player
     if addon and addon.db and addon.db.profile and addon.db.profile.unitframe then
         local config = addon.db.profile.unitframe.player or {}
         local showHealthAlways = config.showHealthTextAlways or false
         local showManaAlways = config.showManaTextAlways or false
-        
+
         -- Handle health text visibility
         if UnitExists('player') then
             local current = UnitHealth('player') or 0
             local maximum = UnitHealthMax('player') or 1
             local textFormat = config.textFormat or "numeric"
             local formattedText = FormatStatusText(current, maximum, textFormat)
-            
+
             if showHealthAlways then
                 if textFormat == "both" and type(formattedText) == "table" then
                     -- Show dual text elements for "both" format
@@ -2897,14 +2868,14 @@ function unitframe.ChangePlayerframe()
                 end
             end
         end
-        
+
         -- Handle mana text visibility
         if UnitExists('player') then
             local currentMana = UnitPower('player') or 0
             local maximumMana = UnitPowerMax('player') or 1
             local textFormat = config.textFormat or "numeric"
             local formattedText = FormatStatusText(currentMana, maximumMana, textFormat)
-            
+
             if showManaAlways then
                 if textFormat == "both" and type(formattedText) == "table" then
                     -- Show dual text elements for "both" format
@@ -2947,16 +2918,16 @@ function unitframe.ChangePlayerframe()
             end
         end
     end
-    
+
     -- Update custom text displays with proper settings
-    unitframe.UpdatePlayerFrameText()
+    unitframe.SafeUpdatePlayerFrameText()
 end
---ChangePlayerframe()
---frame:RegisterEvent('PLAYER_ENTERING_WORLD')
+-- ChangePlayerframe()
+-- frame:RegisterEvent('PLAYER_ENTERING_WORLD')
 
 function unitframe.HookPlayerStatus()
 
-     local UpdateStatus = function()
+    local UpdateStatus = function()
         local frame = _G["DragonUIUnitframeFrame"]
         if not (frame and frame.PlayerFrameDeco) then
             return
@@ -2967,7 +2938,7 @@ function unitframe.HookPlayerStatus()
 
         if UnitHasVehiclePlayerFrameUI and UnitHasVehiclePlayerFrameUI('player') then
             -- TODO: vehicle stuff
-            --frame.PlayerFrameDeco:Show()
+            -- frame.PlayerFrameDeco:Show()
         elseif IsResting() then
             frame.PlayerFrameDeco:Show()
             frame.PlayerFrameBorder:SetVertexColor(1.0, 1.0, 1.0, 1.0)
@@ -3025,9 +2996,8 @@ function unitframe.HookPlayerStatus()
 
     hooksecurefunc('PlayerFrame_UpdateStatus', UpdateStatus)
 end
-    -- No llamar UpdateStatus inmediatamente - dejar que los eventos lo manejen
-    -- UpdateStatus()
-
+-- No llamar UpdateStatus inmediatamente - dejar que los eventos lo manejen
+-- UpdateStatus()
 
 function unitframe.MovePlayerFrame(anchor, anchorOther, dx, dy)
     PlayerFrame:ClearAllPoints()
@@ -3036,7 +3006,7 @@ end
 
 function unitframe.ChangeTargetFrame()
     local base = 'Interface\\Addons\\DragonUI\\Textures\\uiunitframe'
-    
+
     -- Get reference to the DragonUI frame
     local dragonFrame = _G["DragonUIUnitframeFrame"]
     if not dragonFrame then
@@ -3049,9 +3019,7 @@ function unitframe.ChangeTargetFrame()
     if not dragonFrame.TargetFrameBackground then
         local background = TargetFrame:CreateTexture('DragonUITargetFrameBackground')
         background:SetDrawLayer('BACKGROUND', 2)
-        background:SetTexture(
-            'Interface\\Addons\\DragonUI\\Textures\\UI-HUD-UnitFrame-Target-PortraitOn-BACKGROUND'
-        )
+        background:SetTexture('Interface\\Addons\\DragonUI\\Textures\\UI-HUD-UnitFrame-Target-PortraitOn-BACKGROUND')
         background:SetPoint('LEFT', TargetFrame, 'LEFT', 0, -32.5 + 10)
         dragonFrame.TargetFrameBackground = background
     end
@@ -3071,7 +3039,7 @@ function unitframe.ChangeTargetFrame()
     local CorrectionX = -5
     TargetFramePortrait:SetPoint('TOPRIGHT', TargetFrame, 'TOPRIGHT', -42 + CorrectionX, -12 + CorrectionY)
 
-    --TargetFrameBuff1:SetPoint('TOPLEFT', TargetFrame, 'BOTTOMLEFT', 5, 0)
+    -- TargetFrameBuff1:SetPoint('TOPLEFT', TargetFrame, 'BOTTOMLEFT', 5, 0)
 
     -- @TODO: change text spacing
     TargetFrameTextureFrameName:ClearAllPoints()
@@ -3085,19 +3053,21 @@ function unitframe.ChangeTargetFrame()
     TargetFrameHealthBar:SetSize(125, 20)
     TargetFrameHealthBar:SetPoint('RIGHT', TargetFramePortrait, 'LEFT', -1, 0)
     TargetFrameHealthBar:GetStatusBarTexture():SetTexture(
-        'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health'
-    )
-    TargetFrameHealthBar:GetStatusBarTexture():SetDrawLayer("BORDER", 1)  -- BORDER con sublevel bajo: por encima del fondo, por debajo de todo lo demás
+        'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health')
+    TargetFrameHealthBar:GetStatusBarTexture():SetDrawLayer("BORDER", 1) -- BORDER con sublevel bajo: por encima del fondo, por debajo de todo lo demás
     TargetFrameHealthBar:SetStatusBarColor(1, 1, 1, 1)
-    
+
     -- [[ INICIO DE LA LÓGICA DE RECORTE DINÁMICO PARA LA BARRA DE VIDA DEL TARGET ]]
     if not TargetFrameHealthBar.DragonUI_HealthBarHooked then
         TargetFrameHealthBar:HookScript("OnValueChanged", function(self, value)
-            if not UnitExists("target") then return end
+            if not UnitExists("target") then
+                return
+            end
 
             local statusBarTexture = self:GetStatusBarTexture()
-            statusBarTexture:SetTexture('Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health')
-            
+            statusBarTexture:SetTexture(
+                'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health')
+
             -- BORDER con sublevel bajo: por encima del fondo, por debajo de todo lo demás
             statusBarTexture:SetDrawLayer("BORDER", 1)
 
@@ -3159,12 +3129,12 @@ function unitframe.ChangeTargetFrame()
         local deltaSize = 132 - 125
 
         TargetFrameTextureFrameHealthBarText:SetPoint('CENTER', TargetFrameHealthBar, 'CENTER', 0, 0)
-        --TargetFrameTextureFrame.HealthBarTextLeft:SetPoint('LEFT', TargetFrameHealthBar, 'LEFT', dx, 0)
-        --TargetFrameTextureFrame.HealthBarTextRight:SetPoint('RIGHT', TargetFrameHealthBar, 'RIGHT', -dx, 0)
+        -- TargetFrameTextureFrame.HealthBarTextLeft:SetPoint('LEFT', TargetFrameHealthBar, 'LEFT', dx, 0)
+        -- TargetFrameTextureFrame.HealthBarTextRight:SetPoint('RIGHT', TargetFrameHealthBar, 'RIGHT', -dx, 0)
 
         TargetFrameTextureFrameManaBarText:SetPoint('CENTER', TargetFrameManaBar, 'CENTER', -deltaSize / 2, 0)
-       -- TargetFrameTextureFrame.ManaBarTextLeft:SetPoint('LEFT', TargetFrameManaBar, 'LEFT', dx, 0)
-        --TargetFrameTextureFrame.ManaBarTextRight:SetPoint('RIGHT', TargetFrameManaBar, 'RIGHT', -deltaSize - dx, 0)
+        -- TargetFrameTextureFrame.ManaBarTextLeft:SetPoint('LEFT', TargetFrameManaBar, 'LEFT', dx, 0)
+        -- TargetFrameTextureFrame.ManaBarTextRight:SetPoint('RIGHT', TargetFrameManaBar, 'RIGHT', -deltaSize - dx, 0)
     end
 
     if true then
@@ -3174,50 +3144,41 @@ function unitframe.ChangeTargetFrame()
             local flash = TargetFrame:CreateTexture('DragonUITargetFrameFlash')
             flash:SetDrawLayer('BACKGROUND', 2)
             flash:SetTexture(
-                'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-InCombat'
-            )
+                'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-InCombat')
             flash:SetPoint('CENTER', TargetFrame, 'CENTER', 20 + CorrectionX, -20 + CorrectionY)
             flash:SetSize(256, 128)
-            --flash:SetScale(1)
+            -- flash:SetScale(1)
             flash:SetVertexColor(1.0, 0.0, 0.0, 1.0)
             flash:SetBlendMode('ADD')
             dragonFrame.TargetFrameFlash = flash
         end
 
-        hooksecurefunc(
-            TargetFrameFlash,
-            'Show',
-            function()
+        hooksecurefunc(TargetFrameFlash, 'Show', function()
 
-                local dragonFrame = _G["DragonUIUnitframeFrame"]
-                if dragonFrame and dragonFrame.TargetFrameFlash then
-                    TargetFrameFlash:SetTexture('')
-                    dragonFrame.TargetFrameFlash:Show()
-                    if (UIFrameIsFlashing(dragonFrame.TargetFrameFlash)) then
-                    else
-                      
-                        local dt = 0.5
-                        UIFrameFlash(dragonFrame.TargetFrameFlash, dt, dt, -1)
-                    end
+            local dragonFrame = _G["DragonUIUnitframeFrame"]
+            if dragonFrame and dragonFrame.TargetFrameFlash then
+                TargetFrameFlash:SetTexture('')
+                dragonFrame.TargetFrameFlash:Show()
+                if (UIFrameIsFlashing(dragonFrame.TargetFrameFlash)) then
+                else
+
+                    local dt = 0.5
+                    UIFrameFlash(dragonFrame.TargetFrameFlash, dt, dt, -1)
                 end
             end
-        )
+        end)
 
-        hooksecurefunc(
-            TargetFrameFlash,
-            'Hide',
-            function()
-               
-                local dragonFrame = _G["DragonUIUnitframeFrame"]
-                if dragonFrame and dragonFrame.TargetFrameFlash then
-                    TargetFrameFlash:SetTexture('')
-                    if (UIFrameIsFlashing(dragonFrame.TargetFrameFlash)) then
-                        UIFrameFlashStop(dragonFrame.TargetFrameFlash)
-                    end
-                    dragonFrame.TargetFrameFlash:Hide()
+        hooksecurefunc(TargetFrameFlash, 'Hide', function()
+
+            local dragonFrame = _G["DragonUIUnitframeFrame"]
+            if dragonFrame and dragonFrame.TargetFrameFlash then
+                TargetFrameFlash:SetTexture('')
+                if (UIFrameIsFlashing(dragonFrame.TargetFrameFlash)) then
+                    UIFrameFlashStop(dragonFrame.TargetFrameFlash)
                 end
+                dragonFrame.TargetFrameFlash:Hide()
             end
-        )
+        end)
     end
 
     if not dragonFrame.PortraitExtra then
@@ -3230,8 +3191,10 @@ function unitframe.ChangeTargetFrame()
 
         extra.UpdateStyle = function()
             local dragonFrame = _G["DragonUIUnitframeFrame"]
-            if not dragonFrame then return end
-            
+            if not dragonFrame then
+                return
+            end
+
             local class = UnitClassification('target')
             --[[ "worldboss", "rareelite", "elite", "rare", "normal", "trivial" or "minus" ]]
             if class == 'worldboss' then
@@ -3279,7 +3242,8 @@ function unitframe.ChangeTargetFrame()
 
         dragonFrame.TargetFrameHealthBarDummy = TargetFrameHealthBarDummy
 
-        local t = TargetFrameHealthBarDummy:CreateFontString('TargetFrameCustomHealthBarText', 'OVERLAY', 'TextStatusBarText')
+        local t = TargetFrameHealthBarDummy:CreateFontString('TargetFrameCustomHealthBarText', 'OVERLAY',
+            'TextStatusBarText')
         -- Set manually larger font size for health text while keeping base template
         local font, originalSize, flags = t:GetFont()
         if font and originalSize then
@@ -3301,7 +3265,7 @@ function unitframe.ChangeTargetFrame()
         healthTextLeft:SetJustifyH("LEFT")
         healthTextLeft:Hide()
         dragonFrame.TargetFrameHealthBarTextLeft = healthTextLeft
-        
+
         local healthTextRight = TargetFrameHealthBarDummy:CreateFontString(nil, "OVERLAY", "TextStatusBarText")
         -- Set manually larger font size for health dual text while keeping base template
         local font, originalSize, flags = healthTextRight:GetFont()
@@ -3315,18 +3279,20 @@ function unitframe.ChangeTargetFrame()
 
         local function UpdateTargetCustomText()
             local dragonFrame = _G["DragonUIUnitframeFrame"]
-            if not dragonFrame then return end
-            
+            if not dragonFrame then
+                return
+            end
+
             if addon and addon.db and addon.db.profile and addon.db.profile.unitframe then
                 local config = addon.db.profile.unitframe.target or {}
                 local textFormat = config.textFormat or "both"
                 local useBreakup = config.breakUpLargeNumbers or false
-                
+
                 if UnitExists('target') then
                     local current = UnitHealth('target') or 0
                     local maximum = UnitHealthMax('target') or 1
                     local formattedText = FormatStatusText(current, maximum, textFormat)
-                    
+
                     if textFormat == "both" and type(formattedText) == "table" then
                         -- Update dual text elements
                         if dragonFrame.TargetFrameHealthBarTextLeft then
@@ -3342,13 +3308,13 @@ function unitframe.ChangeTargetFrame()
                             dragonFrame.TargetFrameHealthBarText:SetText(displayText)
                         end
                     end
-                    
+
                     -- Also update mana text if it exists
                     if dragonFrame.TargetFrameManaBarText then
                         local currentMana = UnitPower('target') or 0
                         local maximumMana = UnitPowerMax('target') or 1
                         local formattedManaText = FormatStatusText(currentMana, maximumMana, textFormat)
-                        
+
                         if textFormat == "both" and type(formattedManaText) == "table" then
                             -- Update dual mana text elements
                             if dragonFrame.TargetFrameManaBarTextLeft then
@@ -3359,7 +3325,8 @@ function unitframe.ChangeTargetFrame()
                             end
                         else
                             -- Update single mana text element
-                            local displayManaText = type(formattedManaText) == "table" and formattedManaText.combined or formattedManaText
+                            local displayManaText = type(formattedManaText) == "table" and formattedManaText.combined or
+                                                        formattedManaText
                             dragonFrame.TargetFrameManaBarText:SetText(displayManaText)
                         end
                     end
@@ -3374,7 +3341,7 @@ function unitframe.ChangeTargetFrame()
                 local config = addon.db.profile.unitframe.target or {}
                 local showHealthAlways = config.showHealthTextAlways or false
                 local textFormat = config.textFormat or "both"
-                
+
                 if not showHealthAlways then
                     UpdateTargetCustomText()
                     if textFormat == "both" then
@@ -3397,7 +3364,7 @@ function unitframe.ChangeTargetFrame()
                 local config = addon.db.profile.unitframe.target or {}
                 local showHealthAlways = config.showHealthTextAlways or false
                 local textFormat = config.textFormat or "both"
-                
+
                 if not showHealthAlways then
                     if textFormat == "both" then
                         -- Hide dual text elements for "both" format
@@ -3428,7 +3395,8 @@ function unitframe.ChangeTargetFrame()
 
         dragonFrame.TargetFrameManaBarDummy = TargetFrameManaBarDummy
 
-        local t = TargetFrameManaBarDummy:CreateFontString('TargetFrameCustomManaBarText', 'OVERLAY', 'TextStatusBarText')
+        local t = TargetFrameManaBarDummy:CreateFontString('TargetFrameCustomManaBarText', 'OVERLAY',
+            'TextStatusBarText')
         t:SetPoint('CENTER', TargetFrameManaBarDummy, -6, 0)
         t:SetText('MANA')
         t:Hide()
@@ -3440,7 +3408,7 @@ function unitframe.ChangeTargetFrame()
         manaTextLeft:SetJustifyH("LEFT")
         manaTextLeft:Hide()
         dragonFrame.TargetFrameManaBarTextLeft = manaTextLeft
-        
+
         local manaTextRight = TargetFrameManaBarDummy:CreateFontString(nil, "OVERLAY", "TextStatusBarText")
         manaTextRight:SetPoint("RIGHT", TargetFrameManaBarDummy, "RIGHT", -13, 0)
         manaTextRight:SetJustifyH("RIGHT")
@@ -3454,12 +3422,12 @@ function unitframe.ChangeTargetFrame()
                 local config = addon.db.profile.unitframe.target or {}
                 local showManaAlways = config.showManaTextAlways or false
                 local textFormat = config.textFormat or "both"
-                
+
                 if not showManaAlways and UnitExists('target') then
                     local currentMana = UnitPower('target') or 0
                     local maximumMana = UnitPowerMax('target') or 1
                     local formattedText = FormatStatusText(currentMana, maximumMana, textFormat)
-                    
+
                     if textFormat == "both" and type(formattedText) == "table" then
                         -- Show dual text elements for "both" format
                         if dragonFrame.TargetFrameManaBarTextLeft and dragonFrame.TargetFrameManaBarTextRight then
@@ -3484,7 +3452,7 @@ function unitframe.ChangeTargetFrame()
                 local config = addon.db.profile.unitframe.target or {}
                 local showManaAlways = config.showManaTextAlways or false
                 local textFormat = config.textFormat or "both"
-                
+
                 if not showManaAlways then
                     if textFormat == "both" then
                         -- Hide dual text elements for "both" format
@@ -3500,13 +3468,13 @@ function unitframe.ChangeTargetFrame()
             end
         end)
     end
-    
+
     -- Update visibility based on individual showTextAlways settings for Target
     if addon and addon.db and addon.db.profile and addon.db.profile.unitframe then
         local config = addon.db.profile.unitframe.target or {}
         local showHealthAlways = config.showHealthTextAlways or false
         local showManaAlways = config.showManaTextAlways or false
-        
+
         -- Handle health text visibility
         if dragonFrame.TargetFrameHealthBarText then
             if showHealthAlways and UnitExists('target') then
@@ -3521,14 +3489,14 @@ function unitframe.ChangeTargetFrame()
                 dragonFrame.TargetFrameHealthBarText:Hide()
             end
         end
-        
+
         -- Handle mana text visibility (same logic as health)
         if UnitExists('target') then
             local currentMana = UnitPower('target') or 0
             local maximumMana = UnitPowerMax('target') or 1
             local textFormat = config.textFormat or "both"
             local formattedText = FormatStatusText(currentMana, maximumMana, textFormat)
-            
+
             if showManaAlways then
                 if textFormat == "both" and type(formattedText) == "table" then
                     -- Show dual text elements for "both" format
@@ -3576,14 +3544,13 @@ function unitframe.ReApplyTargetFrame()
     -- Lógica de la barra de vida (se mantiene igual)
     if addon:GetConfigValue("unitframe", "target", "classcolor") and UnitIsPlayer('target') then
         TargetFrameHealthBar:GetStatusBarTexture():SetTexture(
-            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health-Status'
-        )
+            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health-Status')
         local localizedClass, englishClass, classIndex = UnitClass('target')
-        TargetFrameHealthBar:SetStatusBarColor(RAID_CLASS_COLORS[englishClass].r, RAID_CLASS_COLORS[englishClass].g, RAID_CLASS_COLORS[englishClass].b, 1)
+        TargetFrameHealthBar:SetStatusBarColor(RAID_CLASS_COLORS[englishClass].r, RAID_CLASS_COLORS[englishClass].g,
+            RAID_CLASS_COLORS[englishClass].b, 1)
     else
         TargetFrameHealthBar:GetStatusBarTexture():SetTexture(
-            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health'
-        )
+            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health')
         TargetFrameHealthBar:SetStatusBarColor(1, 1, 1, 1)
     end
 
@@ -3591,11 +3558,13 @@ function unitframe.ReApplyTargetFrame()
     -- Nos aseguramos de que el hook se aplique solo una vez para evitar duplicados.
     if not TargetFrameManaBar.DragonUI_PowerBarHooked then
         TargetFrameManaBar:HookScript("OnValueChanged", function(self, value)
-            if not UnitExists("target") then return end
+            if not UnitExists("target") then
+                return
+            end
 
             local powerType, powerTypeString = UnitPowerType('target')
             local texturePath = 'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\'
-            
+
             if powerTypeString == 'MANA' then
                 texturePath = texturePath .. 'UI-HUD-UnitFrame-Target-PortraitOn-Bar-Mana'
             elseif powerTypeString == 'FOCUS' then
@@ -3632,7 +3601,7 @@ function unitframe.ReApplyTargetFrame()
         -- Marcamos que el hook ya ha sido aplicado.
         TargetFrameManaBar.DragonUI_PowerBarHooked = true
     end
-    
+
     -- Forzamos una actualización del valor de la barra de poder para que nuestro nuevo hook se ejecute inmediatamente.
     if UnitExists("target") then
         local currentValue = UnitPower("target")
@@ -3649,12 +3618,14 @@ function unitframe.ReApplyTargetFrame()
     if frame.PortraitExtra then
         frame.PortraitExtra:UpdateStyle()
     end
-    
+
     -- Actualizamos los textos del marco del objetivo.
     if UnitExists('target') then
-        local config = addon.db and addon.db.profile and addon.db.profile.unitframe and addon.db.profile.unitframe.target
+        local config = addon.db and addon.db.profile and addon.db.profile.unitframe and
+                           addon.db.profile.unitframe.target
         if config then
-            unitframe.UpdateTargetFrameTextSelective(config.showHealthTextAlways or false, config.showManaTextAlways or false)
+            unitframe.UpdateTargetFrameTextSelective(config.showHealthTextAlways or false,
+                config.showManaTextAlways or false)
         end
     end
 end
@@ -3662,10 +3633,12 @@ end
 -- FIXED: Target of Target Frame Functions - Completely Rewritten
 -- FIXED: Simplified ToT reapply function based on ultimaversion
 function unitframe.ReApplyToTFrame()
-    if not TargetFrameToT or not UnitExists('targettarget') then return end
-    
+    if not TargetFrameToT or not UnitExists('targettarget') then
+        return
+    end
+
     local config = addon.db and addon.db.profile and addon.db.profile.unitframe and addon.db.profile.unitframe.tot or {}
-    
+
     -- Apply health bar texture and colors (simplified like ultimaversion)
     if TargetFrameToTHealthBar then
         -- CRITICAL FIX: Use SetVertexColor, consistent with StyleToTFrame
@@ -3695,8 +3668,10 @@ end
 
 -- FIXED: Simplified ToT configuration function based on ultimaversion
 function unitframe.ChangeToT()
-    if not TargetFrameToT then return end
-    
+    if not TargetFrameToT then
+        return
+    end
+
     -- Get configuration settings
     local config = addon.db and addon.db.profile and addon.db.profile.unitframe and addon.db.profile.unitframe.tot or {}
     local scale = config.scale or 1.0
@@ -3705,7 +3680,7 @@ function unitframe.ChangeToT()
     local anchorParent = config.anchorParent or 'BOTTOMRIGHT'
     local x = config.x or (-35 + 27)
     local y = config.y or -15
-    
+
     -- Position and scale the ToT frame (like ultimaversion)
     TargetFrameToT:ClearAllPoints()
     TargetFrameToT:SetPoint(anchor, _G[anchorFrame] or TargetFrame, anchorParent, x, y)
@@ -3716,21 +3691,22 @@ function unitframe.ChangeToT()
     if TargetFrameToTTextureFrameTexture then
         TargetFrameToTTextureFrameTexture:SetTexture('')
     end
-    
+
     -- Hide original background
     if TargetFrameToTBackground then
         TargetFrameToTBackground:Hide()
     end
-    
+
     -- Create custom background and border (like ultimaversion)
     local totDelta = 1
-    
+
     -- WoW 3.3.5a Layer Order: Create background (BACKGROUND layer - Capa 0)
     -- FIXED: Follow exact same pattern as PlayerFrame, TargetFrame, FocusFrame
     if not frame.TargetFrameToTBackground then
         local background = TargetFrameToT:CreateTexture('DragonUITargetFrameToTBackground')
-        background:SetDrawLayer('BACKGROUND', 0)  -- Same sublevel as other frames
-        background:SetTexture('Interface\\Addons\\DragonUI\\Textures\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-BACKGROUND')
+        background:SetDrawLayer('BACKGROUND', 0) -- Same sublevel as other frames
+        background:SetTexture(
+            'Interface\\Addons\\DragonUI\\Textures\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-BACKGROUND')
         background:SetPoint('LEFT', TargetFrameToTPortrait, 'CENTER', -25 + 1, -10 + totDelta)
         frame.TargetFrameToTBackground = background
     end
@@ -3738,7 +3714,7 @@ function unitframe.ChangeToT()
     -- WoW 3.3.5a Layer Order: Create border (OVERLAY layer - Capa 3) - Real border on top
     if not frame.TargetFrameToTBorder then
         local border = TargetFrameToTHealthBar:CreateTexture('DragonUITargetFrameToTBorder')
-        border:SetDrawLayer('OVERLAY', 0)  -- Capa 3: Real border on top of everything
+        border:SetDrawLayer('OVERLAY', 0) -- Capa 3: Real border on top of everything
         border:SetTexture('Interface\\Addons\\DragonUI\\Textures\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-BORDER')
         border:SetPoint('LEFT', TargetFrameToTPortrait, 'CENTER', -25 + 1, -10 + totDelta)
         -- FIXED: Ensure visibility
@@ -3746,13 +3722,12 @@ function unitframe.ChangeToT()
         border:SetAlpha(1)
         frame.TargetFrameToTBorder = border
     end
-    
+
     -- WoW 3.3.5a Layer Order: Position health bar in BORDER layer (Capa 1)
     TargetFrameToTHealthBar:ClearAllPoints()
     TargetFrameToTHealthBar:SetPoint('LEFT', TargetFrameToTPortrait, 'RIGHT', 1 + 1, 0 + totDelta)
     TargetFrameToTHealthBar:SetFrameStrata("LOW")
     TargetFrameToTHealthBar:SetSize(70.5, 10)
-
 
     -- WoW 3.3.5a Layer Order: Position mana bar in BORDER layer (Capa 1)
     TargetFrameToTManaBar:ClearAllPoints()
@@ -3765,7 +3740,7 @@ function unitframe.ChangeToT()
     if TargetFrameToTTextureFrameName then
         TargetFrameToTTextureFrameName:ClearAllPoints()
         TargetFrameToTTextureFrameName:SetPoint('LEFT', TargetFrameToTPortrait, 'RIGHT', 1 + 1, 2 + 12 - 1 + totDelta)
-        TargetFrameToTTextureFrameName:SetDrawLayer("BORDER", 1)  -- Capa 1: Text in BORDER layer
+        TargetFrameToTTextureFrameName:SetDrawLayer("BORDER", 1) -- Capa 1: Text in BORDER layer
     end
 
     -- Position dead/unconscious text (like ultimaversion)
@@ -3787,8 +3762,10 @@ end
 
 -- FIXED: ToT styling function - Consistent with target and player frames
 function unitframe.StyleToTFrame()
-    if not TargetFrameToT then return end
-    
+    if not TargetFrameToT then
+        return
+    end
+
     -- FIXED: Completely remove default Blizzard texture frame that causes visual artifacts
     if TargetFrameToTTextureFrame and TargetFrameToTTextureFrame.EnableMouse then
         TargetFrameToTTextureFrame:Hide()
@@ -3806,32 +3783,31 @@ function unitframe.StyleToTFrame()
         TargetFrameToTTextureFrameTexture:SetTexture('')
         TargetFrameToTTextureFrameTexture:SetAlpha(0)
     end
-    
+
     -- Position elements using consistent coordinates
     local totDelta = 1
-    
+
     -- NOTE: Background and border are created in ChangeToT() to avoid duplication
-    
+
     -- WoW 3.3.5a Layer Order: Complete health bar initialization - CORRECT LAYER APPROACH
     TargetFrameToTHealthBar:Hide() -- Hide first to prevent visual glitches
     TargetFrameToTHealthBar:ClearAllPoints()
     TargetFrameToTHealthBar:SetParent(TargetFrameToT)
-    
+
     -- CRITICAL FIX: Use BORDER layer (Capa 1) with high sublevel to be above background
 
-    TargetFrameToTHealthBar:GetStatusBarTexture():SetDrawLayer("BORDER", 5)  -- BORDER layer, high sublevel
-    
+    TargetFrameToTHealthBar:GetStatusBarTexture():SetDrawLayer("BORDER", 5) -- BORDER layer, high sublevel
+
     -- Apply texture and properties
     TargetFrameToTHealthBar:GetStatusBarTexture():SetTexture(
-        'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Health'
-    )
+        'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Health')
     TargetFrameToTHealthBar.SetStatusBarColor = noop
     TargetFrameToTHealthBar:GetStatusBarTexture():SetVertexColor(1, 1, 1, 1)
-    
+
     -- Position and size
     TargetFrameToTHealthBar:SetSize(70.5, 10)
     TargetFrameToTHealthBar:SetPoint('LEFT', TargetFrameToTPortrait, 'RIGHT', 1 + 1, 0 + totDelta)
-    
+
     -- Final show
     TargetFrameToTHealthBar:Show()
 
@@ -3839,23 +3815,22 @@ function unitframe.StyleToTFrame()
     TargetFrameToTManaBar:Hide() -- Hide first to prevent visual glitches
     TargetFrameToTManaBar:ClearAllPoints()
     TargetFrameToTManaBar:SetParent(TargetFrameToT)
-    
+
     -- CRITICAL FIX: Use BORDER layer (Capa 1) with high sublevel to be above background
     TargetFrameToTManaBar:SetFrameStrata("LOW")
-    TargetFrameToTManaBar:GetStatusBarTexture():SetDrawLayer("BORDER", 5)  -- BORDER layer, high sublevel
-    
+    TargetFrameToTManaBar:GetStatusBarTexture():SetDrawLayer("BORDER", 5) -- BORDER layer, high sublevel
+
     -- Apply texture and properties
     TargetFrameToTManaBar:GetStatusBarTexture():SetTexture(
-        'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Mana'
-    )
+        'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Mana')
 
     TargetFrameToTManaBar.SetStatusBarColor = noop
     TargetFrameToTManaBar:GetStatusBarTexture():SetVertexColor(1, 1, 1, 1)
-    
+
     -- Position and size
     TargetFrameToTManaBar:SetSize(74, 7.5)
     TargetFrameToTManaBar:SetPoint('LEFT', TargetFrameToTPortrait, 'RIGHT', 1 - 2 - 1.5 + 1, 2 - 10 - 1 + totDelta)
-    
+
     -- Final show
     TargetFrameToTManaBar:Show()
 
@@ -3886,45 +3861,45 @@ function unitframe.StyleToTFrame()
         TargetFrameToTTextureFrameUnconsciousText:SetPoint('CENTER', TargetFrameToTHealthBar, 'CENTER', 0, 0)
     end
 
-        -- Position debuffs (if they exist)
-        if TargetFrameToTDebuff1 then
-            TargetFrameToTDebuff1:SetPoint('TOPLEFT', TargetFrameToT, 'TOPRIGHT', 5, -20)
-        end
-        
+    -- Position debuffs (if they exist)
+    if TargetFrameToTDebuff1 then
+        TargetFrameToTDebuff1:SetPoint('TOPLEFT', TargetFrameToT, 'TOPRIGHT', 5, -20)
+    end
+
     -- FIXED: Add persistent color hooks for ToT frames like target frame
     -- Target ToT Health Bar persistent color hook
     TargetFrameToTHealthBar:HookScript('OnValueChanged', function(self)
-        if not UnitExists('targettarget') then return end
-        
+        if not UnitExists('targettarget') then
+            return
+        end
+
         -- WoW 3.3.5a: Force correct layer assignment for bars to be above background
         TargetFrameToTHealthBar:GetStatusBarTexture():SetDrawLayer("BORDER", 5)
-        
-        local config = addon.db and addon.db.profile and addon.db.profile.unitframe and addon.db.profile.unitframe.tot or {}
-        
+
+        local config =
+            addon.db and addon.db.profile and addon.db.profile.unitframe and addon.db.profile.unitframe.tot or {}
+
         if config.classcolor and UnitIsPlayer('targettarget') then
             local localizedClass, englishClass, classIndex = UnitClass('targettarget')
             if englishClass and RAID_CLASS_COLORS[englishClass] then
                 TargetFrameToTHealthBar:GetStatusBarTexture():SetTexture(
-                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Health-Status'
-                )
+                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Health-Status')
                 local color = RAID_CLASS_COLORS[englishClass]
                 -- Use SetVertexColor since SetStatusBarColor is disabled
                 TargetFrameToTHealthBar:GetStatusBarTexture():SetVertexColor(color.r, color.g, color.b, 1)
             else
                 TargetFrameToTHealthBar:GetStatusBarTexture():SetTexture(
-                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Health'
-                )
+                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Health')
                 -- Use SetVertexColor since SetStatusBarColor is disabled
                 TargetFrameToTHealthBar:GetStatusBarTexture():SetVertexColor(1, 1, 1, 1)
             end
         else
             TargetFrameToTHealthBar:GetStatusBarTexture():SetTexture(
-                'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Health'
-            )
+                'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Health')
             -- Use SetVertexColor since SetStatusBarColor is disabled
             TargetFrameToTHealthBar:GetStatusBarTexture():SetVertexColor(1, 1, 1, 1)
         end
-        
+
         -- SIMPLE: Update name text when health changes (indicates unit change)
         if TargetFrameToTTextureFrameName and UnitExists('targettarget') then
             local name = UnitName('targettarget')
@@ -3937,22 +3912,24 @@ function unitframe.StyleToTFrame()
             end
         end
     end)
-    
+
     -- Target ToT Mana Bar persistent color hook
     TargetFrameToTManaBar:HookScript('OnValueChanged', function(self)
-        if not UnitExists('targettarget') then return end
-        
+        if not UnitExists('targettarget') then
+            return
+        end
+
         -- WoW 3.3.5a: Force correct layer assignment for bars to be above background
         TargetFrameToTManaBar:GetStatusBarTexture():SetDrawLayer("BORDER", 5)
-        
+
         -- Always maintain white color for mana bar regardless of power type
         -- Use SetVertexColor since SetStatusBarColor is disabled
         TargetFrameToTManaBar:GetStatusBarTexture():SetVertexColor(1, 1, 1, 1)
-        
+
         -- Also ensure correct texture based on power type
         unitframe.UpdateToTPowerBarTexture()
     end)
-    
+
     -- FIXED: Minimal OnUpdate that only handles critical frame level maintenance
     local frameCounter = 0
     local lastUnitName = ""
@@ -3960,7 +3937,7 @@ function unitframe.StyleToTFrame()
         frameCounter = frameCounter + 1
         if frameCounter >= 60 then -- Only check every 60 frames (every 2 seconds) to minimize interference
             frameCounter = 0
-            
+
             -- Update name text only if unit name actually changed
             if TargetFrameToTTextureFrameName and UnitExists('targettarget') then
                 local name = UnitName('targettarget') or ""
@@ -3982,10 +3959,10 @@ function unitframe.StyleToTFrame()
             end
         end
     end)
-    
+
     -- FIXED: Remove aggressive SetFrameLevel hooks that cause combat issues
     -- Instead, we'll rely on the OnUpdate check every 10 frames which is less intrusive
-    
+
     -- Create tooltip system for Target of Target
     if not frame.TargetFrameToTTooltip then
         -- Create health text (positioned over health bar)
@@ -3993,29 +3970,29 @@ function unitframe.StyleToTFrame()
         -- Make font smaller for better fit in ToT frame
         local font, size, flags = healthText:GetFont()
         if font and size then
-            healthText:SetFont(font, size - 1, flags)  -- Reduce size by 1 point
+            healthText:SetFont(font, size - 1, flags) -- Reduce size by 1 point
         end
         healthText:SetPoint("CENTER", TargetFrameToTHealthBar, "TOP", 0, -4)
         healthText:SetTextColor(1, 1, 1, 1)
         healthText:SetJustifyH("CENTER")
         healthText:Hide()
-        
+
         -- Create mana text (positioned over mana bar)
         local manaText = TargetFrameToTManaBar:CreateFontString(nil, "OVERLAY", "TextStatusBarText")
         -- Make font smaller for better fit in ToT frame
         local font, size, flags = manaText:GetFont()
         if font and size then
-            manaText:SetFont(font, size - 1, flags)  -- Reduce size by 1 point
+            manaText:SetFont(font, size - 1, flags) -- Reduce size by 1 point
         end
         manaText:SetPoint("CENTER", TargetFrameToTManaBar, "TOP", 1, -4)
         manaText:SetTextColor(1, 1, 1, 1)
         manaText:SetJustifyH("CENTER")
         manaText:Hide()
-        
+
         -- Store references
         frame.TargetFrameToTHealthText = healthText
         frame.TargetFrameToTManaText = manaText
-        
+
         -- Function to update tooltip content
         local function UpdateToTTooltip()
             if not UnitExists('targettarget') then
@@ -4023,41 +4000,41 @@ function unitframe.StyleToTFrame()
                 frame.TargetFrameToTManaText:Hide()
                 return
             end
-            
+
             local health = UnitHealth('targettarget') or 0
             local mana = UnitPower('targettarget') or 0
             local powerType = UnitPowerType('targettarget')
-            
+
             -- Format health text
             local healthFormatted = health > 999 and string.format("%.1fk", health / 1000) or tostring(health)
             frame.TargetFrameToTHealthText:SetText(healthFormatted)
-            
+
             -- Format mana/power text based on power type
             local manaFormatted = mana > 999 and string.format("%.1fk", mana / 1000) or tostring(mana)
             frame.TargetFrameToTManaText:SetText(manaFormatted)
         end
-        
+
         -- Store update function for external access
         frame.TargetFrameToTUpdateTooltip = UpdateToTTooltip
     end
-    
+
     -- Create separate invisible frames for health and mana bars only (not covering portrait)
     if not frame.TargetFrameToTHealthMouseFrame then
         -- Health bar hover frame
         local healthMouseFrame = CreateFrame("Frame", "DragonUITargetFrameToTHealthMouseFrame", TargetFrameToT)
         healthMouseFrame:SetAllPoints(TargetFrameToTHealthBar)
-        healthMouseFrame:SetFrameLevel(4)  -- Level 4: Above bars (3) for mouse detection
+        healthMouseFrame:SetFrameLevel(4) -- Level 4: Above bars (3) for mouse detection
         healthMouseFrame:EnableMouse(true)
-        
+
         -- Mana bar hover frame
         local manaMouseFrame = CreateFrame("Frame", "DragonUITargetFrameToTManaMouseFrame", TargetFrameToT)
         manaMouseFrame:SetAllPoints(TargetFrameToTManaBar)
-        manaMouseFrame:SetFrameLevel(4)  -- Level 4: Above bars (3) for mouse detection
+        manaMouseFrame:SetFrameLevel(4) -- Level 4: Above bars (3) for mouse detection
         manaMouseFrame:EnableMouse(true)
-        
+
         local isUpdating = false
         local updateCounter = 0
-        
+
         -- Shared functions for both frames
         local function OnEnterHandler()
             if UnitExists('targettarget') then
@@ -4065,26 +4042,26 @@ function unitframe.StyleToTFrame()
                 frame.TargetFrameToTUpdateTooltip()
                 frame.TargetFrameToTHealthText:Show()
                 frame.TargetFrameToTManaText:Show()
-                
+
                 -- Start real-time updates while mouse is over
                 isUpdating = true
                 updateCounter = 0
             end
         end
-        
+
         local function OnLeaveHandler()
             -- Hide texts when mouse leaves
             frame.TargetFrameToTHealthText:Hide()
             frame.TargetFrameToTManaText:Hide()
             isUpdating = false
         end
-        
+
         -- Apply hover events to both health and mana frames
         healthMouseFrame:SetScript("OnEnter", OnEnterHandler)
         healthMouseFrame:SetScript("OnLeave", OnLeaveHandler)
         manaMouseFrame:SetScript("OnEnter", OnEnterHandler)
         manaMouseFrame:SetScript("OnLeave", OnLeaveHandler)
-        
+
         -- Use OnUpdate for real-time updates (WoW 3.3.5a compatible) - only on health frame to avoid duplication
         healthMouseFrame:SetScript("OnUpdate", function(self, elapsed)
             if isUpdating and UnitExists('targettarget') then
@@ -4101,7 +4078,7 @@ function unitframe.StyleToTFrame()
                 isUpdating = false
             end
         end)
-        
+
         frame.TargetFrameToTHealthMouseFrame = healthMouseFrame
         frame.TargetFrameToTManaMouseFrame = manaMouseFrame
     end
@@ -4109,20 +4086,24 @@ end
 
 -- Helper function to format numbers for ToT/FoT display
 function unitframe.FormatToTNumber(value)
-    if not value or type(value) ~= "number" then return "0" end
-    if value < 1000 then return tostring(value) end
+    if not value or type(value) ~= "number" then
+        return "0"
+    end
+    if value < 1000 then
+        return tostring(value)
+    end
     return string.format("%.1fk", value / 1000)
 end
 
-
-
 -- FIXED: Unified ToT power bar texture update function
 function unitframe.UpdateToTPowerBarTexture()
-    if not TargetFrameToTManaBar or not UnitExists('targettarget') then return end
-    
+    if not TargetFrameToTManaBar or not UnitExists('targettarget') then
+        return
+    end
+
     local powerType = UnitPowerType('targettarget')
     local texturePath = "Interface\\Addons\\DragonUI\\Textures\\Unitframe\\"
-    
+
     -- FIXED: Use consistent texture naming without -Status suffix for natural colors
     if powerType == 0 then -- Mana
         texturePath = texturePath .. "UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Mana"
@@ -4137,9 +4118,9 @@ function unitframe.UpdateToTPowerBarTexture()
     else
         texturePath = texturePath .. "UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Mana"
     end
-    
+
     TargetFrameToTManaBar:GetStatusBarTexture():SetTexture(texturePath)
-    
+
     -- WoW 3.3.5a: Maintain proper layer assignment
     TargetFrameToTManaBar:SetFrameStrata("LOW")
     TargetFrameToTManaBar:GetStatusBarTexture():SetDrawLayer("BORDER", 5)
@@ -4186,7 +4167,7 @@ function unitframe.FormatToTNumber(value)
     if not value or value == 0 then
         return "0"
     end
-    
+
     if value < 1000 then
         return tostring(math.floor(value))
     elseif value < 1000000 then
@@ -4200,23 +4181,14 @@ function unitframe.FormatToTNumber(value)
     end
 end
 
-
-
-
-
-
-
-
 function unitframe.MoveTargetFrame(anchor, anchorOther, dx, dy)
     TargetFrame:ClearAllPoints()
     TargetFrame:SetPoint(anchor, UIParent, anchorOther, dx, dy)
 end
 
-
-
 function unitframe.ChangeFocusFrame()
     local base = 'Interface\\Addons\\DragonUI\\Textures\\uiunitframe'
-    
+
     -- Get reference to the DragonUI frame
     local dragonFrame = _G["DragonUIUnitframeFrame"]
     if not dragonFrame then
@@ -4229,9 +4201,7 @@ function unitframe.ChangeFocusFrame()
     if not dragonFrame.FocusFrameBackground then
         local background = FocusFrame:CreateTexture('DragonUIFocusFrameBackground')
         background:SetDrawLayer('BACKGROUND', 2)
-        background:SetTexture(
-            'Interface\\Addons\\DragonUI\\Textures\\UI-HUD-UnitFrame-Target-PortraitOn-BACKGROUND'
-        )
+        background:SetTexture('Interface\\Addons\\DragonUI\\Textures\\UI-HUD-UnitFrame-Target-PortraitOn-BACKGROUND')
         background:SetPoint('LEFT', FocusFrame, 'LEFT', 0, -32.5 + 10)
         dragonFrame.FocusFrameBackground = background
     end
@@ -4273,7 +4243,7 @@ function unitframe.ChangeFocusFrame()
         -- Usar SetFont como ToT para ser más confiable que SetScale
         local font, size, flags = FocusFrameTextureFrameName:GetFont()
         if font and size then
-            FocusFrameTextureFrameName:SetFont(font, math.max(size * 0.9, 10), flags)  -- Reducir tamaño de fuente
+            FocusFrameTextureFrameName:SetFont(font, math.max(size * 0.9, 10), flags) -- Reducir tamaño de fuente
         end
     end
 
@@ -4300,26 +4270,27 @@ function unitframe.ChangeFocusFrame()
     FocusFrameHealthBar:ClearAllPoints()
     FocusFrameHealthBar:SetSize(125, 20)
     FocusFrameHealthBar:SetPoint('RIGHT', FocusFramePortrait, 'LEFT', -1, 0)
-    
+
     -- Mana 119,12
     FocusFrameManaBar:ClearAllPoints()
     FocusFrameManaBar:SetPoint('RIGHT', FocusFramePortrait, 'LEFT', -1 + 8 - 0.5, -18 + 1 + 0.5)
     FocusFrameManaBar:SetSize(132, 9)
     FocusFrameManaBar:GetStatusBarTexture():SetTexture(
-        'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Mana'
-    )
-    FocusFrameManaBar:GetStatusBarTexture():SetDrawLayer("BORDER", 1)  -- Misma capa que la barra de vida
+        'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Mana')
+    FocusFrameManaBar:GetStatusBarTexture():SetDrawLayer("BORDER", 1) -- Misma capa que la barra de vida
     FocusFrameManaBar:SetStatusBarColor(1, 1, 1, 1)
 
     -- [[ INICIO DE LA LÓGICA DE RECORTE DINÁMICO PARA LA BARRA DE PODER DEL FOCUS ]]
     -- Nos aseguramos de que el hook se aplique solo una vez para evitar duplicados.
     if not FocusFrameManaBar.DragonUI_PowerBarHooked then
         FocusFrameManaBar:HookScript("OnValueChanged", function(self, value)
-            if not UnitExists("focus") then return end
+            if not UnitExists("focus") then
+                return
+            end
 
             local powerType, powerTypeString = UnitPowerType('focus')
             local texturePath = 'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\'
-            
+
             if powerTypeString == 'MANA' then
                 texturePath = texturePath .. 'UI-HUD-UnitFrame-Target-PortraitOn-Bar-Mana'
             elseif powerTypeString == 'FOCUS' then
@@ -4337,7 +4308,7 @@ function unitframe.ChangeFocusFrame()
 
             local statusBarTexture = self:GetStatusBarTexture()
             statusBarTexture:SetTexture(texturePath)
-            
+
             -- Configurar el draw layer correcto para la barra de maná del focus
             statusBarTexture:SetDrawLayer("BORDER", 1)
 
@@ -4359,7 +4330,7 @@ function unitframe.ChangeFocusFrame()
         -- Marcamos que el hook ya ha sido aplicado.
         FocusFrameManaBar.DragonUI_PowerBarHooked = true
     end
-    
+
     -- Forzamos una actualización del valor de la barra de poder para que nuestro nuevo hook se ejecute inmediatamente.
     if UnitExists("focus") then
         local currentValue = UnitPower("focus")
@@ -4405,7 +4376,7 @@ function unitframe.ChangeFocusFrame()
         healthTextLeft:SetJustifyH("LEFT")
         healthTextLeft:Hide()
         frame.FocusFrameHealthBarTextLeft = healthTextLeft
-        
+
         local healthTextRight = FocusFrameHealthBarDummy:CreateFontString(nil, "OVERLAY", "TextStatusBarText")
         -- Set manually larger font size for health dual text while keeping base template
         local font, originalSize, flags = healthTextRight:GetFont()
@@ -4424,8 +4395,10 @@ function unitframe.ChangeFocusFrame()
                 local showHealthAlways = config.showHealthTextAlways or false
                 local textFormat = config.textFormat or "numeric"
                 local useBreakup = config.breakUpLargeNumbers
-                if useBreakup == nil then useBreakup = false end
-                
+                if useBreakup == nil then
+                    useBreakup = false
+                end
+
                 if not showHealthAlways then
                     -- Check if standard text is visible (like in original)
                     if FocusFrameTextureFrameHealthBarText and FocusFrameTextureFrameHealthBarText:IsVisible() then
@@ -4436,7 +4409,7 @@ function unitframe.ChangeFocusFrame()
                             local max_health = UnitHealthMax('focus')
                             local health = UnitHealth('focus')
                             local formattedHealthText = FormatStatusText(health, max_health, textFormat, useBreakup)
-                            
+
                             -- Show appropriate health elements based on format
                             if textFormat == "both" and type(formattedHealthText) == "table" then
                                 -- For "both" format, show dual elements
@@ -4454,7 +4427,8 @@ function unitframe.ChangeFocusFrame()
                                 end
                             else
                                 -- For other formats, show single element
-                                local displayText = type(formattedHealthText) == "table" and formattedHealthText.combined or formattedHealthText
+                                local displayText = type(formattedHealthText) == "table" and
+                                                        formattedHealthText.combined or formattedHealthText
                                 if frame.FocusFrameHealthBarText then
                                     frame.FocusFrameHealthBarText:SetText(displayText)
                                     frame.FocusFrameHealthBarText:Show()
@@ -4477,7 +4451,7 @@ function unitframe.ChangeFocusFrame()
             if addon and addon.db and addon.db.profile and addon.db.profile.unitframe then
                 local config = addon.db.profile.unitframe.focus or {}
                 local showHealthAlways = config.showHealthTextAlways or false
-                
+
                 if not showHealthAlways then
                     -- Hide only HEALTH text elements
                     if frame.FocusFrameHealthBarText then
@@ -4520,7 +4494,7 @@ function unitframe.ChangeFocusFrame()
         manaTextLeft:SetJustifyH("LEFT")
         manaTextLeft:Hide()
         frame.FocusFrameManaBarTextLeft = manaTextLeft
-        
+
         local manaTextRight = FocusFrameManaBarDummy:CreateFontString(nil, "OVERLAY", "TextStatusBarText")
         manaTextRight:SetPoint("RIGHT", FocusFrameManaBarDummy, "RIGHT", -13, 0)
         manaTextRight:SetJustifyH("RIGHT")
@@ -4534,8 +4508,10 @@ function unitframe.ChangeFocusFrame()
                 local showManaAlways = config.showManaTextAlways or false
                 local textFormat = config.textFormat or "numeric"
                 local useBreakup = config.breakUpLargeNumbers
-                if useBreakup == nil then useBreakup = false end
-                
+                if useBreakup == nil then
+                    useBreakup = false
+                end
+
                 if not showManaAlways then
                     -- Check if standard text is visible (like in original)
                     if FocusFrameTextureFrameManaBarText and FocusFrameTextureFrameManaBarText:IsVisible() then
@@ -4545,7 +4521,7 @@ function unitframe.ChangeFocusFrame()
                         if UnitExists('focus') then
                             local max_mana = UnitPowerMax('focus')
                             local mana = UnitPower('focus')
-                            
+
                             if max_mana == 0 then
                                 -- Hide all mana text if no mana
                                 if frame.FocusFrameManaBarText then
@@ -4562,7 +4538,7 @@ function unitframe.ChangeFocusFrame()
                                 end
                             else
                                 local formattedManaText = FormatStatusText(mana, max_mana, textFormat, useBreakup)
-                                
+
                                 -- Show appropriate mana elements based on format
                                 if textFormat == "both" and type(formattedManaText) == "table" then
                                     -- For "both" format, show dual elements
@@ -4580,7 +4556,8 @@ function unitframe.ChangeFocusFrame()
                                     end
                                 else
                                     -- For other formats, show single element
-                                    local displayText = type(formattedManaText) == "table" and formattedManaText.combined or formattedManaText
+                                    local displayText = type(formattedManaText) == "table" and
+                                                            formattedManaText.combined or formattedManaText
                                     if frame.FocusFrameManaBarText then
                                         frame.FocusFrameManaBarText:SetText(displayText)
                                         frame.FocusFrameManaBarText:Show()
@@ -4604,7 +4581,7 @@ function unitframe.ChangeFocusFrame()
             if addon and addon.db and addon.db.profile and addon.db.profile.unitframe then
                 local config = addon.db.profile.unitframe.focus or {}
                 local showManaAlways = config.showManaTextAlways or false
-                
+
                 if not showManaAlways then
                     -- Hide only MANA text elements
                     if frame.FocusFrameManaBarText then
@@ -4632,10 +4609,8 @@ function unitframe.ChangeFocusFrame()
 
     if not frame.FocusFrameFlash then
         local flash = FocusFrame:CreateTexture('DragonUIFocusFrameFlash')
-        flash:SetDrawLayer('BACKGROUND', 1)  -- Sublevel más bajo para que esté por debajo de todo
-        flash:SetTexture(
-            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-InCombat'
-        )
+        flash:SetDrawLayer('BACKGROUND', 1) -- Sublevel más bajo para que esté por debajo de todo
+        flash:SetTexture('Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-InCombat')
         flash:SetPoint('CENTER', FocusFrame, 'CENTER', 20 + CorrectionX, -20 + CorrectionY)
         flash:SetSize(256, 128)
         -- Textures don't have SetScale in WoW 3.3.5a, only frames do
@@ -4647,35 +4622,27 @@ function unitframe.ChangeFocusFrame()
         frame.FocusFrameFlash = flash
     end
 
-    hooksecurefunc(
-        FocusFrameFlash,
-        'Show',
-        function()
-            if FocusFrameFlash then
-                FocusFrameFlash:SetTexture('')
-            end
-            frame.FocusFrameFlash:Show()
-            if (UIFrameIsFlashing(frame.FocusFrameFlash)) then
-            else
-                local dt = 0.5
-                UIFrameFlash(frame.FocusFrameFlash, dt, dt, -1)
-            end
+    hooksecurefunc(FocusFrameFlash, 'Show', function()
+        if FocusFrameFlash then
+            FocusFrameFlash:SetTexture('')
         end
-    )
+        frame.FocusFrameFlash:Show()
+        if (UIFrameIsFlashing(frame.FocusFrameFlash)) then
+        else
+            local dt = 0.5
+            UIFrameFlash(frame.FocusFrameFlash, dt, dt, -1)
+        end
+    end)
 
-    hooksecurefunc(
-        FocusFrameFlash,
-        'Hide',
-        function()
-            if FocusFrameFlash then
-                FocusFrameFlash:SetTexture('')
-            end
-            if (UIFrameIsFlashing(frame.FocusFrameFlash)) then
-                UIFrameFlashStop(frame.FocusFrameFlash)
-            end
-            frame.FocusFrameFlash:Hide()
+    hooksecurefunc(FocusFrameFlash, 'Hide', function()
+        if FocusFrameFlash then
+            FocusFrameFlash:SetTexture('')
         end
-    )
+        if (UIFrameIsFlashing(frame.FocusFrameFlash)) then
+            UIFrameFlashStop(frame.FocusFrameFlash)
+        end
+        frame.FocusFrameFlash:Hide()
+    end)
 
     if not frame.FocusExtra then
         local extra = FocusFrame:CreateTexture('DragonUIFocusFramePortraitExtra')
@@ -4718,13 +4685,13 @@ function unitframe.ChangeFocusFrame()
 
         frame.FocusExtra = extra
     end
-    
+
     -- Update visibility based on individual showTextAlways settings for Focus
     if addon and addon.db and addon.db.profile and addon.db.profile.unitframe then
         local config = addon.db.profile.unitframe.focus or {}
         local showHealthAlways = config.showHealthTextAlways or false
         local showManaAlways = config.showManaTextAlways or false
-        
+
         -- Handle health text visibility
         if frame.FocusFrameHealthBarText then
             if showHealthAlways and UnitExists('focus') then
@@ -4734,7 +4701,7 @@ function unitframe.ChangeFocusFrame()
                 frame.FocusFrameHealthBarText:Hide()
             end
         end
-        
+
         -- Handle mana text visibility
         if frame.FocusFrameManaBarText then
             if showManaAlways and UnitExists('focus') then
@@ -4747,7 +4714,6 @@ function unitframe.ChangeFocusFrame()
     end
 end
 
-
 function unitframe.MoveFocusFrame(anchor, anchorOther, dx, dy)
     FocusFrame:ClearAllPoints()
     FocusFrame:SetPoint(anchor, UIParent, anchorOther, dx, dy)
@@ -4756,34 +4722,37 @@ end
 function unitframe.ReApplyFocusFrame()
     if addon:GetConfigValue("unitframe", "focus", "classcolor") and UnitIsPlayer('focus') then
         FocusFrameHealthBar:GetStatusBarTexture():SetTexture(
-            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health-Status'
-        )
+            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health-Status')
         local localizedClass, englishClass, classIndex = UnitClass('focus')
-        FocusFrameHealthBar:SetStatusBarColor(RAID_CLASS_COLORS[englishClass].r, RAID_CLASS_COLORS[englishClass].g, RAID_CLASS_COLORS[englishClass].b, 1)
+        FocusFrameHealthBar:SetStatusBarColor(RAID_CLASS_COLORS[englishClass].r, RAID_CLASS_COLORS[englishClass].g,
+            RAID_CLASS_COLORS[englishClass].b, 1)
     else
         FocusFrameHealthBar:GetStatusBarTexture():SetTexture(
-            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health'
-        )
+            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health')
         FocusFrameHealthBar:SetStatusBarColor(1, 1, 1, 1)
     end
-    
+
     -- BORDER con sublevel bajo: por encima del fondo, por debajo de todo lo demás
     FocusFrameHealthBar:GetStatusBarTexture():SetDrawLayer("BORDER", 1)
 
     -- [[ INICIO DE LA LÓGICA DE RECORTE DINÁMICO PARA LA BARRA DE VIDA DEL FOCUS ]]
     if not FocusFrameHealthBar.DragonUI_HealthBarHooked then
         FocusFrameHealthBar:HookScript("OnValueChanged", function(self, value)
-            if not UnitExists("focus") then return end
+            if not UnitExists("focus") then
+                return
+            end
 
             local statusBarTexture = self:GetStatusBarTexture()
-            
+
             -- Aplicar la textura correcta según la configuración de color de clase
             if addon:GetConfigValue("unitframe", "focus", "classcolor") and UnitIsPlayer('focus') then
-                statusBarTexture:SetTexture('Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health-Status')
+                statusBarTexture:SetTexture(
+                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health-Status')
             else
-                statusBarTexture:SetTexture('Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health')
+                statusBarTexture:SetTexture(
+                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health')
             end
-            
+
             -- BORDER con sublevel bajo: por encima del fondo, por debajo de todo lo demás
             statusBarTexture:SetDrawLayer("BORDER", 1)
 
@@ -4819,24 +4788,19 @@ function unitframe.ReApplyFocusFrame()
 
     if powerTypeString == 'MANA' then
         FocusFrameManaBar:GetStatusBarTexture():SetTexture(
-            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Mana'
-        )
+            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Mana')
     elseif powerTypeString == 'FOCUS' then
         FocusFrameManaBar:GetStatusBarTexture():SetTexture(
-            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Focus'
-        )
+            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Focus')
     elseif powerTypeString == 'RAGE' then
         FocusFrameManaBar:GetStatusBarTexture():SetTexture(
-            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Rage'
-        )
+            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Rage')
     elseif powerTypeString == 'ENERGY' then
         FocusFrameManaBar:GetStatusBarTexture():SetTexture(
-            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Energy'
-        )
+            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Energy')
     elseif powerTypeString == 'RUNIC_POWER' then
         FocusFrameManaBar:GetStatusBarTexture():SetTexture(
-            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-RunicPower'
-        )
+            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-RunicPower')
     end
 
     -- Do not force mana bar color here - let the natural color system handle it
@@ -4853,10 +4817,12 @@ end
 -- FIXED: Focus ToT Frame Functions - Completely Rewritten like Target ToT
 -- FIXED: Simplified FoT reapply function based on ultimaversion
 function unitframe.ReApplyFocusToTFrame()
-    if not FocusFrameToT or not UnitExists('focustarget') then return end
-    
+    if not FocusFrameToT or not UnitExists('focustarget') then
+        return
+    end
+
     local config = addon.db and addon.db.profile and addon.db.profile.unitframe and addon.db.profile.unitframe.fot or {}
-    
+
     -- Apply health bar texture and colors (simplified like ultimaversion)
     if FocusFrameToTHealthBar then
         -- CRITICAL FIX: Use SetVertexColor, consistent with StyleFocusToTFrame
@@ -4885,8 +4851,10 @@ function unitframe.ReApplyFocusToTFrame()
 end
 
 function unitframe.ChangeFocusToT()
-    if not FocusFrameToT then return end
-    
+    if not FocusFrameToT then
+        return
+    end
+
     -- Get configuration settings
     local config = addon.db and addon.db.profile and addon.db.profile.unitframe and addon.db.profile.unitframe.fot or {}
     local scale = config.scale or 1.0
@@ -4895,7 +4863,7 @@ function unitframe.ChangeFocusToT()
     local anchorParent = config.anchorParent or 'BOTTOMRIGHT'
     local x = config.x or (-35 + 27)
     local y = config.y or -15
-    
+
     -- Position and scale the FoT frame (like ultimaversion)
     FocusFrameToT:ClearAllPoints()
     FocusFrameToT:SetPoint(anchor, _G[anchorFrame] or FocusFrame, anchorParent, x, y)
@@ -4906,19 +4874,20 @@ function unitframe.ChangeFocusToT()
     if FocusFrameToTTextureFrameTexture then
         FocusFrameToTTextureFrameTexture:SetTexture('')
     end
-    
+
     -- Hide original background
     if FocusFrameToTBackground then
         FocusFrameToTBackground:Hide()
     end
-    
+
     -- Create custom background and border (like ultimaversion)
     local fotDelta = 1
-    
+
     if not frame.FocusFrameToTBackground then
         local background = FocusFrameToT:CreateTexture('DragonUIFocusFrameToTBackground')
         background:SetDrawLayer('BACKGROUND', 0)
-        background:SetTexture('Interface\\Addons\\DragonUI\\Textures\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-BACKGROUND')
+        background:SetTexture(
+            'Interface\\Addons\\DragonUI\\Textures\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-BACKGROUND')
         background:SetPoint('LEFT', FocusFrameToTPortrait, 'CENTER', -25 + 1, -10 + fotDelta)
         frame.FocusFrameToTBackground = background
     end
@@ -4933,7 +4902,7 @@ function unitframe.ChangeFocusToT()
         frame.FocusFrameToTBorder = border
     end
 
-     -- Position name text 
+    -- Position name text 
     if FocusFrameToTTextureFrameName then
         FocusFrameToTTextureFrameName:ClearAllPoints()
         FocusFrameToTTextureFrameName:SetPoint('LEFT', FocusFrameToTPortrait, 'RIGHT', 1 + 1, 2 + 12 - 1 + fotDelta)
@@ -4957,10 +4926,11 @@ function unitframe.ChangeFocusToT()
     end
 end
 
-
 function unitframe.StyleFocusToTFrame()
-    if not FocusFrameToT then return end
-    
+    if not FocusFrameToT then
+        return
+    end
+
     -- Hide default Blizzard texture frame (Tu código original - CORRECTO)
     if FocusFrameToTTextureFrame and FocusFrameToTTextureFrame.EnableMouse then
         FocusFrameToTTextureFrame:Hide()
@@ -4974,9 +4944,8 @@ function unitframe.StyleFocusToTFrame()
         FocusFrameToTTextureFrameTexture:SetTexture('')
         FocusFrameToTTextureFrameTexture:SetAlpha(0)
     end
-    
+
     local fotDelta = 1
-    
 
     -- Setup health bar
     FocusFrameToTHealthBar:Hide()
@@ -4984,7 +4953,8 @@ function unitframe.StyleFocusToTFrame()
     FocusFrameToTHealthBar:SetParent(FocusFrameToT)
     FocusFrameToTHealthBar:SetFrameStrata("LOW")
     FocusFrameToTHealthBar:GetStatusBarTexture():SetDrawLayer("BORDER", 5) -- Capa 1 (BORDER), por encima del fondo
-    FocusFrameToTHealthBar:GetStatusBarTexture():SetTexture('Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Health')
+    FocusFrameToTHealthBar:GetStatusBarTexture():SetTexture(
+        'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Health')
     FocusFrameToTHealthBar.SetStatusBarColor = noop -- Desactivar el cambio de color de Blizzard
     FocusFrameToTHealthBar:GetStatusBarTexture():SetVertexColor(1, 1, 1, 1) -- Usar VertexColor para el color
     FocusFrameToTHealthBar:SetSize(70.5, 10)
@@ -4997,17 +4967,16 @@ function unitframe.StyleFocusToTFrame()
     FocusFrameToTManaBar:SetParent(FocusFrameToT)
     FocusFrameToTManaBar:SetFrameStrata("LOW")
     FocusFrameToTManaBar:GetStatusBarTexture():SetDrawLayer("BORDER", 5) -- Capa 1 (BORDER), por encima del fondo
-    FocusFrameToTManaBar:GetStatusBarTexture():SetTexture('Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Mana')
+    FocusFrameToTManaBar:GetStatusBarTexture():SetTexture(
+        'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Mana')
     FocusFrameToTManaBar.SetStatusBarColor = noop -- Desactivar el cambio de color de Blizzard
     FocusFrameToTManaBar:GetStatusBarTexture():SetVertexColor(1, 1, 1, 1) -- Usar VertexColor para el color
     FocusFrameToTManaBar:SetSize(74, 7.5)
     FocusFrameToTManaBar:SetPoint('LEFT', FocusFrameToTPortrait, 'RIGHT', 1 - 2 - 1.5 + 1, 2 - 10 - 1 + fotDelta)
     FocusFrameToTManaBar:Show()
 
-
-
     -- Posicionar texto del nombre (Tu código original - CORRECTO)
-   if FocusFrameToTTextureFrameName then
+    if FocusFrameToTTextureFrameName then
         FocusFrameToTTextureFrameName:ClearAllPoints()
         FocusFrameToTTextureFrameName:SetPoint('LEFT', FocusFrameToTPortrait, 'RIGHT', 3, 13 + fotDelta)
         FocusFrameToTTextureFrameName:SetParent(FocusFrameToT)
@@ -5032,31 +5001,37 @@ function unitframe.StyleFocusToTFrame()
     if FocusFrameToTDebuff1 then
         FocusFrameToTDebuff1:SetPoint('TOPLEFT', FocusFrameToT, 'TOPRIGHT', 5, -20)
     end
-        
+
     -- Hook de la barra de vida (Tu código adaptado para usar SetVertexColor)
     FocusFrameToTHealthBar:HookScript('OnValueChanged', function(self)
-        if not UnitExists('focustarget') then return end
-        
+        if not UnitExists('focustarget') then
+            return
+        end
+
         -- Seguridad para mantener la capa correcta
         self:GetStatusBarTexture():SetDrawLayer("BORDER", 5)
-        
-        local config = addon.db and addon.db.profile and addon.db.profile.unitframe and addon.db.profile.unitframe.fot or {}
+
+        local config =
+            addon.db and addon.db.profile and addon.db.profile.unitframe and addon.db.profile.unitframe.fot or {}
         if config.classcolor and UnitIsPlayer('focustarget') then
             local _, englishClass = UnitClass('focustarget')
             if englishClass and RAID_CLASS_COLORS[englishClass] then
-                self:GetStatusBarTexture():SetTexture('Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Health-Status')
+                self:GetStatusBarTexture():SetTexture(
+                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Health-Status')
                 local color = RAID_CLASS_COLORS[englishClass]
                 self:GetStatusBarTexture():SetVertexColor(color.r, color.g, color.b, 1)
             else
-                self:GetStatusBarTexture():SetTexture('Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Health')
+                self:GetStatusBarTexture():SetTexture(
+                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Health')
                 self:GetStatusBarTexture():SetVertexColor(1, 1, 1, 1)
             end
         else
-            self:GetStatusBarTexture():SetTexture('Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Health')
+            self:GetStatusBarTexture():SetTexture(
+                'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Health')
             self:GetStatusBarTexture():SetVertexColor(1, 1, 1, 1)
         end
 
-        --Text Update
+        -- Text Update
         if FocusFrameToTTextureFrameName and UnitExists('focustarget') then
             local name = UnitName('focustarget')
             if name then
@@ -5069,41 +5044,45 @@ function unitframe.StyleFocusToTFrame()
         end
 
     end)
-    
+
     -- Hook de la barra de maná (Tu código adaptado)
     FocusFrameToTManaBar:HookScript('OnValueChanged', function(self)
-        if not UnitExists('focustarget') then return end
-        
+        if not UnitExists('focustarget') then
+            return
+        end
+
         -- Seguridad para mantener la capa correcta
         self:GetStatusBarTexture():SetDrawLayer("BORDER", 5)
         self:GetStatusBarTexture():SetVertexColor(1, 1, 1, 1)
         unitframe.UpdateFocusToTPowerBarTexture()
     end)
-    
- 
 
     -- Creación del Tooltip (Tu código original - CORRECTO)
     if not frame.FocusFrameToTTooltip then
 
         local healthText = FocusFrameToTHealthBar:CreateFontString(nil, "OVERLAY", "TextStatusBarText")
         local font, size, flags = healthText:GetFont()
-        if font and size then healthText:SetFont(font, size - 1, flags) end
+        if font and size then
+            healthText:SetFont(font, size - 1, flags)
+        end
         healthText:SetPoint("CENTER", FocusFrameToTHealthBar, "TOP", 0, -4)
         healthText:SetTextColor(1, 1, 1, 1)
         healthText:SetJustifyH("CENTER")
         healthText:Hide()
-        
+
         local manaText = FocusFrameToTManaBar:CreateFontString(nil, "OVERLAY", "TextStatusBarText")
         local font, size, flags = manaText:GetFont()
-        if font and size then manaText:SetFont(font, size - 1, flags) end
+        if font and size then
+            manaText:SetFont(font, size - 1, flags)
+        end
         manaText:SetPoint("CENTER", FocusFrameToTManaBar, "TOP", 1, -4)
         manaText:SetTextColor(1, 1, 1, 1)
         manaText:SetJustifyH("CENTER")
         manaText:Hide()
-        
+
         frame.FocusFrameToTHealthText = healthText
         frame.FocusFrameToTManaText = manaText
-        
+
         local function UpdateFocusToTTooltip()
             if not UnitExists('focustarget') then
                 frame.FocusFrameToTHealthText:Hide()
@@ -5117,11 +5096,11 @@ function unitframe.StyleFocusToTFrame()
             local manaFormatted = unitframe.FormatFocusToTNumber(mana)
             frame.FocusFrameToTManaText:SetText(manaFormatted)
         end
-        
+
         frame.FocusFrameToTUpdateTooltip = UpdateFocusToTTooltip
         frame.FocusFrameToTTooltip = true
     end
-    
+
     -- Creación de los frames para el ratón (Tu código original - CORRECTO)
     if not frame.FocusFrameToTHealthMouseFrame then
         -- ... (todo tu código de creación de healthMouseFrame, manaMouseFrame y sus scripts se conserva aquí)
@@ -5129,15 +5108,15 @@ function unitframe.StyleFocusToTFrame()
         healthMouseFrame:SetAllPoints(FocusFrameToTHealthBar)
         healthMouseFrame:SetFrameLevel(FocusFrameToTHealthBar:GetFrameLevel() + 1)
         healthMouseFrame:EnableMouse(true)
-        
+
         local manaMouseFrame = CreateFrame("Frame", "DragonUIFocusFrameToTManaMouseFrame", FocusFrameToT)
         manaMouseFrame:SetAllPoints(FocusFrameToTManaBar)
         manaMouseFrame:SetFrameLevel(FocusFrameToTManaBar:GetFrameLevel() + 1)
         manaMouseFrame:EnableMouse(true)
-        
+
         local isUpdating = false
         local updateCounter = 0
-        
+
         local function OnEnterHandler()
             if UnitExists('focustarget') then
                 frame.FocusFrameToTUpdateTooltip()
@@ -5147,18 +5126,18 @@ function unitframe.StyleFocusToTFrame()
                 updateCounter = 0
             end
         end
-        
+
         local function OnLeaveHandler()
             frame.FocusFrameToTHealthText:Hide()
             frame.FocusFrameToTManaText:Hide()
             isUpdating = false
         end
-        
+
         healthMouseFrame:SetScript("OnEnter", OnEnterHandler)
         healthMouseFrame:SetScript("OnLeave", OnLeaveHandler)
         manaMouseFrame:SetScript("OnEnter", OnEnterHandler)
         manaMouseFrame:SetScript("OnLeave", OnLeaveHandler)
-        
+
         healthMouseFrame:SetScript("OnUpdate", function(self, elapsed)
             if isUpdating and UnitExists('focustarget') then
                 updateCounter = updateCounter + elapsed
@@ -5172,7 +5151,7 @@ function unitframe.StyleFocusToTFrame()
                 isUpdating = false
             end
         end)
-        
+
         frame.FocusFrameToTHealthMouseFrame = healthMouseFrame
         frame.FocusFrameToTManaMouseFrame = manaMouseFrame
     end
@@ -5180,11 +5159,13 @@ end
 
 -- FIXED: Unified FoT power bar texture update function
 function unitframe.UpdateFocusToTPowerBarTexture()
-    if not FocusFrameToTManaBar or not UnitExists('focustarget') then return end
-    
+    if not FocusFrameToTManaBar or not UnitExists('focustarget') then
+        return
+    end
+
     local powerType = UnitPowerType('focustarget')
     local texturePath = "Interface\\Addons\\DragonUI\\Textures\\Unitframe\\"
-    
+
     -- FIXED: Use consistent texture naming without -Status suffix for natural colors
     if powerType == 0 then -- Mana
         texturePath = texturePath .. "UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Mana"
@@ -5199,11 +5180,10 @@ function unitframe.UpdateFocusToTPowerBarTexture()
     else
         texturePath = texturePath .. "UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Mana"
     end
-    
+
     FocusFrameToTManaBar:GetStatusBarTexture():SetTexture(texturePath)
     -- FIXED: Use SetVertexColor since SetStatusBarColor is disabled
     FocusFrameToTManaBar:GetStatusBarTexture():SetVertexColor(1, 1, 1, 1)
-    
 
 end
 
@@ -5212,7 +5192,7 @@ function unitframe.FormatFocusToTNumber(value)
     if not value or value == 0 then
         return "0"
     end
-    
+
     if value < 1000 then
         return tostring(math.floor(value))
     elseif value < 1000000 then
@@ -5226,50 +5206,56 @@ function unitframe.FormatFocusToTNumber(value)
     end
 end
 
-
-
-
 function unitframe.UpdateFocusText()
 
     local dragonFrame = _G["DragonUIUnitframeFrame"]
-    if not dragonFrame then return end
-    
+    if not dragonFrame then
+        return
+    end
+
     if UnitExists('focus') then
         local max_health = UnitHealthMax('focus')
         local health = UnitHealth('focus')
-        
+
         -- Use configurable text format for focus
         if addon and addon.db and addon.db.profile and addon.db.profile.unitframe then
             local config = addon.db.profile.unitframe.focus or {}
             local textFormat = config.textFormat or "numeric"
             local useBreakup = config.breakUpLargeNumbers -- Don't use 'or false' to preserve nil vs false distinction
-            if useBreakup == nil then useBreakup = false end -- Explicit nil check
+            if useBreakup == nil then
+                useBreakup = false
+            end -- Explicit nil check
             local showHealthAlways = config.showHealthTextAlways or false
             local showManaAlways = config.showManaTextAlways or false
-            
+
             -- FIXED: Helper function to check if mouse is over a frame
             local function IsMouseOverFrame(frame)
-                if not frame then return false end
+                if not frame then
+                    return false
+                end
                 local mouseX, mouseY = GetCursorPosition()
                 local scale = frame:GetEffectiveScale()
                 mouseX = mouseX / scale
                 mouseY = mouseY / scale
-                
-                local left, bottom, width, height = frame:GetLeft(), frame:GetBottom(), frame:GetWidth(), frame:GetHeight()
-                if not (left and bottom and width and height) then return false end
-                
+
+                local left, bottom, width, height = frame:GetLeft(), frame:GetBottom(), frame:GetWidth(),
+                    frame:GetHeight()
+                if not (left and bottom and width and height) then
+                    return false
+                end
+
                 local right = left + width
                 local top = bottom + height
-                
+
                 return mouseX >= left and mouseX <= right and mouseY >= bottom and mouseY <= top
             end
-            
+
             -- FIXED: Check if mouse is over focus frames
             local focusHealthHover = IsMouseOverFrame(dragonFrame.FocusFrameHealthBarDummy)
             local focusManaHover = IsMouseOverFrame(dragonFrame.FocusFrameManaBarDummy)
-            
+
             local formattedHealthText = FormatStatusText(health, max_health, textFormat, useBreakup)
-            
+
             if textFormat == "both" and type(formattedHealthText) == "table" then
                 -- Update dual text elements
                 if dragonFrame.FocusFrameHealthBarTextLeft then
@@ -5294,7 +5280,8 @@ function unitframe.UpdateFocusText()
                 end
             else
                 -- Update single text element
-                local displayText = type(formattedHealthText) == "table" and formattedHealthText.combined or formattedHealthText
+                local displayText = type(formattedHealthText) == "table" and formattedHealthText.combined or
+                                        formattedHealthText
                 if dragonFrame.FocusFrameHealthBarText then
                     dragonFrame.FocusFrameHealthBarText:SetText(displayText)
                     if showHealthAlways or focusHealthHover then
@@ -5340,10 +5327,12 @@ function unitframe.UpdateFocusText()
                 local config = addon.db.profile.unitframe.focus or {}
                 local textFormat = config.textFormat or "numeric"
                 local useBreakup = config.breakUpLargeNumbers -- Don't use 'or false' to preserve nil vs false distinction
-                if useBreakup == nil then useBreakup = false end -- Explicit nil check
-                
+                if useBreakup == nil then
+                    useBreakup = false
+                end -- Explicit nil check
+
                 local formattedManaText = FormatStatusText(mana, max_mana, textFormat, useBreakup)
-                
+
                 if textFormat == "both" and type(formattedManaText) == "table" then
                     -- Update dual mana text elements
                     if dragonFrame.FocusFrameManaBarTextLeft then
@@ -5368,7 +5357,8 @@ function unitframe.UpdateFocusText()
                     end
                 else
                     -- Update single mana text element
-                    local displayText = type(formattedManaText) == "table" and formattedManaText.combined or formattedManaText
+                    local displayText = type(formattedManaText) == "table" and formattedManaText.combined or
+                                            formattedManaText
                     if dragonFrame.FocusFrameManaBarText then
                         dragonFrame.FocusFrameManaBarText:SetText(displayText)
                         if showManaAlways or focusManaHover then
@@ -5423,33 +5413,31 @@ function unitframe.UpdateFocusText()
 end
 
 function unitframe.HookFunctions()
-    hooksecurefunc(
-        PlayerFrameTexture,
-        'Show',
-        function()
-          
-            unitframe.ChangePlayerframe()
-        end
-    )
-    
+    hooksecurefunc(PlayerFrameTexture, 'Show', function()
+
+        unitframe.ChangePlayerframe()
+    end)
+
     -- Essential hooks for player frame text updates
     if PlayerFrameHealthBar and PlayerFrameHealthBar.SetValue then
         hooksecurefunc(PlayerFrameHealthBar, "SetValue", function()
-            unitframe.UpdatePlayerFrameText()
+            -- CHANGED: Now calls the correct and safe function.
+            unitframe.SafeUpdatePlayerFrameText()
         end)
     end
-    
+
     if PlayerFrameManaBar and PlayerFrameManaBar.SetValue then
         hooksecurefunc(PlayerFrameManaBar, "SetValue", function()
-            unitframe.UpdatePlayerFrameText()
+            -- CHANGED: Now calls the correct and safe function.
+            unitframe.SafeUpdatePlayerFrameText()
         end)
     end
-    
+
     -- Hook to ensure player frame updates on health/mana changes
     if PlayerFrame then
         PlayerFrame:HookScript("OnEvent", function(self, event, unit)
             if (event == "UNIT_HEALTH" or event == "UNIT_POWER_UPDATE") and unit == "player" then
-                unitframe.UpdatePlayerFrameText()
+                unitframe.SafeUpdatePlayerFrameText()
             end
         end)
     end
@@ -5457,8 +5445,7 @@ end
 
 -- Manual function to force party frame initialization
 function unitframe.ForceInitPartyFrames()
-   
-    
+
     -- Force show party frames first
     for i = 1, 4 do
         local pf = _G['PartyMemberFrame' .. i]
@@ -5467,33 +5454,30 @@ function unitframe.ForceInitPartyFrames()
             pf:SetAlpha(1)
         end
     end
-    
+
     -- Initialize our custom party frames
     if not unitframe.PartyMoveFrame then
         unitframe.ChangePartyFrame()
     end
-    
+
     -- Apply settings
     local partySettings = addon:GetConfigValue("unitframe", "party")
     if partySettings and unitframe.PartyMoveFrame then
         unitframe:UpdatePartyState(partySettings)
     end
-    
+
 end
 
 -- Function to reconfigure party frames on reload without recreating them
 function unitframe.ReconfigurePartyFramesForReload()
 
-    
     -- Only reconfigure if PartyMoveFrame exists (frames are already initialized)
     if not unitframe.PartyMoveFrame then
 
         unitframe.ChangePartyFrame()
         return
     end
-    
 
-    
     -- CRITICAL: Add delay to allow party frames to fully settle after reload
     local delayFrame = CreateFrame("Frame")
     local delayTime = 0
@@ -5512,20 +5496,22 @@ function unitframe.DoPartyFrameReconfiguration()
     for i = 1, 4 do
         local pf = _G['PartyMemberFrame' .. i]
         local healthbar = _G['PartyMemberFrame' .. i .. 'HealthBar']
-        
+
         if pf and healthbar and UnitExists('party' .. i) then
             local settings = addon:GetConfigValue("unitframe", "party") or {}
-                        
+
             if settings.classcolor then
                 local _, class = UnitClass('party' .. i)
                 if class and RAID_CLASS_COLORS[class] then
                     -- Apply class color texture and color (EXACTLY like the hooks do)
-                    healthbar:SetStatusBarTexture('Interface\\Addons\\DragonUI\\Textures\\Partyframe\\UI-HUD-UnitFrame-Party-PortraitOn-Bar-Health-Status')
+                    healthbar:SetStatusBarTexture(
+                        'Interface\\Addons\\DragonUI\\Textures\\Partyframe\\UI-HUD-UnitFrame-Party-PortraitOn-Bar-Health-Status')
                     local color = RAID_CLASS_COLORS[class]
                     healthbar:SetStatusBarColor(color.r, color.g, color.b, 1)
                 else
                     -- Fallback to normal texture for unknown classes
-                    healthbar:SetStatusBarTexture('Interface\\Addons\\DragonUI\\Textures\\Partyframe\\UI-HUD-UnitFrame-Party-PortraitOn-Bar-Health')
+                    healthbar:SetStatusBarTexture(
+                        'Interface\\Addons\\DragonUI\\Textures\\Partyframe\\UI-HUD-UnitFrame-Party-PortraitOn-Bar-Health')
                     healthbar:SetStatusBarColor(1, 1, 1, 1)
                 end
             else
@@ -5548,7 +5534,7 @@ function unitframe.ChangePartyFrame()
     PartyMoveFrame:SetFrameLevel(2)
     PartyMoveFrame:Show() -- Force show
     unitframe.PartyMoveFrame = PartyMoveFrame
-    
+
     -- PartyMoveFrame created
 
     local sizeX, sizeY = _G['PartyMemberFrame' .. 1]:GetSize()
@@ -5660,15 +5646,16 @@ function unitframe.ChangePartyFrame()
         healthbar:SetSize(70 + 1, 10)
         healthbar:ClearAllPoints()
         healthbar:SetPoint('TOPLEFT', 45 - 1, -19)
-        
+
         -- FIXED: Set frame level to be above border layer (which is on DrawLayer BORDER)
         -- Health bars are functional elements, should be above decorative borders
         healthbar:SetFrameLevel(5)
-        
+
         -- Use individual texture files instead of uipartyframe.blp for better class color support
-        healthbar:SetStatusBarTexture('Interface\\Addons\\DragonUI\\Textures\\Partyframe\\UI-HUD-UnitFrame-Party-PortraitOn-Bar-Health')
+        healthbar:SetStatusBarTexture(
+            'Interface\\Addons\\DragonUI\\Textures\\Partyframe\\UI-HUD-UnitFrame-Party-PortraitOn-Bar-Health')
         healthbar:SetStatusBarColor(1, 1, 1, 1)
-        
+
         -- DEBUG: Log normal texture setup
         local tex = healthbar:GetStatusBarTexture()
         if tex then
@@ -5676,7 +5663,7 @@ function unitframe.ChangePartyFrame()
             if tex then
             end
         end
-        
+
         -- This was causing conflicts with mana bar positioning
 
         -- Completely disable the original WoW text system
@@ -5688,12 +5675,17 @@ function unitframe.ChangePartyFrame()
         healthbar.cvar = nil
         healthbar.textLockable = 0
         healthbar.lockShow = 0
-        
+
         -- Crear nuestros elementos de texto personalizados
-        healthbar.DFTextString = healthbar.DFHealthBarText or healthbar:CreateFontString('DragonUIHealthBarText', 'OVERLAY', 'TextStatusBarText')
-        healthbar.DFLeftText = healthbar.DFHealthBarTextLeft or healthbar:CreateFontString('DragonUIHealthBarTextLeft', 'OVERLAY', 'TextStatusBarText')
-        healthbar.DFRightText = healthbar.DFHealthBarTextRight or healthbar:CreateFontString('DragonUIHealthBarTextRight', 'OVERLAY', 'TextStatusBarText')
-        
+        healthbar.DFTextString = healthbar.DFHealthBarText or
+                                     healthbar:CreateFontString('DragonUIHealthBarText', 'OVERLAY', 'TextStatusBarText')
+        healthbar.DFLeftText = healthbar.DFHealthBarTextLeft or
+                                   healthbar:CreateFontString('DragonUIHealthBarTextLeft', 'OVERLAY',
+                'TextStatusBarText')
+        healthbar.DFRightText = healthbar.DFHealthBarTextRight or
+                                    healthbar:CreateFontString('DragonUIHealthBarTextRight', 'OVERLAY',
+                'TextStatusBarText')
+
         -- Posicionar correctamente en la barra de vida
         healthbar.DFTextString:SetPoint('CENTER', healthbar, 'CENTER', 0, 0)
         healthbar.DFLeftText:SetPoint('LEFT', healthbar, 'LEFT', 0, 0)
@@ -5706,15 +5698,15 @@ function unitframe.ChangePartyFrame()
         manabar:SetSize(74, 7)
         manabar:ClearAllPoints()
         manabar:SetPoint('TOPLEFT', 41, -30)
-        
+
         -- FIXED: Set same frame level as health bar - both are functional elements
         manabar:SetFrameLevel(5)
-        
+
         -- Use uipartyframe.blp with coordinates for mana bar (3.3.5a compatible)
         manabar:SetStatusBarTexture('Interface\\AddOns\\DragonUI\\Textures\\Partyframe\\uipartyframe')
-        
+
         -- NO cambiar el anclaje aquí - puede causar problemas de expansión
-        
+
         -- Default mana bar coordinates - will be updated based on power type
         unitframe.SetPartyManaBarCoords(manabar, 0, 1000, 1000) -- 0 = mana, default values for initialization
         manabar:SetStatusBarColor(1, 1, 1, 1)
@@ -5728,12 +5720,15 @@ function unitframe.ChangePartyFrame()
         manabar.cvar = nil
         manabar.textLockable = 0
         manabar.lockShow = 0
-        
+
         -- Crear nuestros elementos de texto personalizados
-        manabar.DFTextString = manabar.DFManaBarText or manabar:CreateFontString('DragonUIManaBarText', 'OVERLAY', 'TextStatusBarText')
-        manabar.DFLeftText = manabar.DFManaBarTextLeft or manabar:CreateFontString('DragonUIManaBarTextLeft', 'OVERLAY', 'TextStatusBarText')
-        manabar.DFRightText = manabar.DFManaBarTextRight or manabar:CreateFontString('DragonUIManaBarTextRight', 'OVERLAY', 'TextStatusBarText')
-        
+        manabar.DFTextString = manabar.DFManaBarText or
+                                   manabar:CreateFontString('DragonUIManaBarText', 'OVERLAY', 'TextStatusBarText')
+        manabar.DFLeftText = manabar.DFManaBarTextLeft or
+                                 manabar:CreateFontString('DragonUIManaBarTextLeft', 'OVERLAY', 'TextStatusBarText')
+        manabar.DFRightText = manabar.DFManaBarTextRight or
+                                  manabar:CreateFontString('DragonUIManaBarTextRight', 'OVERLAY', 'TextStatusBarText')
+
         -- Posicionar correctamente en la barra de mana
         manabar.DFTextString:SetPoint('CENTER', manabar, 'CENTER', 1.5, 0)
         manabar.DFLeftText:SetPoint('LEFT', manabar, 'LEFT', 3, 0)
@@ -5796,45 +5791,48 @@ function unitframe.ChangePartyFrame()
         pf:RegisterEvent('UNIT_MAXHEALTH')
         pf:RegisterEvent('UNIT_MAXPOWER')
         pf:RegisterEvent('UNIT_DISPLAYPOWER')
-        
+
         -- Hook mana bar value changes to update texture coordinates
         manabar:HookScript('OnValueChanged', function(self, value)
             unitframe.SetPartyManaBarCoords(self, 0) -- Actualizar coordenadas cuando cambie el valor
         end)
-        
+
         -- Hook health bar value changes to maintain class colors and texture switching
         healthbar:HookScript('OnValueChanged', function(self, value)
-            if not UnitExists('party' .. i) then return end
-            
+            if not UnitExists('party' .. i) then
+                return
+            end
+
             -- SIMPLIFIED: Just handle class colors, don't touch layers or frame levels
             local settings = addon:GetConfigValue("unitframe", "party") or {}
-            
+
             if settings.classcolor then
                 local _, class = UnitClass('party' .. i)
                 if class and RAID_CLASS_COLORS[class] then
                     -- Use individual -Status texture for class colors
-                    self:SetStatusBarTexture('Interface\\Addons\\DragonUI\\Textures\\Partyframe\\UI-HUD-UnitFrame-Party-PortraitOn-Bar-Health-Status')
+                    self:SetStatusBarTexture(
+                        'Interface\\Addons\\DragonUI\\Textures\\Partyframe\\UI-HUD-UnitFrame-Party-PortraitOn-Bar-Health-Status')
                     -- FIXED: Don't force DrawLayer - let Blizzard use default layer like normal texture
-                    
+
                     -- DEBUG: Log Status texture setup in hook
                     local tex = self:GetStatusBarTexture()
                     if tex then
                         local layer, sublayer = tex:GetDrawLayer()
                     end
-                    
+
                     local color = RAID_CLASS_COLORS[class]
                     self:SetStatusBarColor(color.r, color.g, color.b, 1)
                 end
             end
         end)
-        
+
         -- Hook the original OnEvent to update our custom elements
         local originalOnEvent = pf:GetScript('OnEvent')
         pf:SetScript('OnEvent', function(self, event, ...)
             if originalOnEvent then
                 originalOnEvent(self, event, ...)
             end
-            
+
             -- Update our custom bars when relevant events fire (with combat protection)
             if event == 'UNIT_HEALTH' or event == 'UNIT_MAXHEALTH' or event == 'PARTY_MEMBER_CHANGED' then
                 local unit = ...
@@ -5864,11 +5862,11 @@ function unitframe.ChangePartyFrame()
             unitframe.UpdatePartyHPBar(i)
             unitframe.UpdatePartyManaBar(i)
         end
-        
+
         -- FIXED: Set frame levels ONCE during initialization, not on every update
         unitframe.EnsurePartyFrameLayerOrder(i)
     end
-    
+
     -- Register global events for party changes
     if not unitframe.PartyEventFrame then
         local eventFrame = CreateFrame('Frame')
@@ -5890,7 +5888,7 @@ function unitframe.ChangePartyFrame()
                             if not InCombatLockdown() and not UnitAffectingCombat('player') then
                                 unitframe.UpdatePartyHPBar(i)
                                 unitframe.UpdatePartyManaBar(i)
-                                
+
                                 -- Re-run the icon positioning logic on every group update
                                 local updateSmallIcons = pf.updateSmallIcons
                                 if updateSmallIcons then
@@ -5903,10 +5901,10 @@ function unitframe.ChangePartyFrame()
                             end
                         end
                     end
-                    
+
                     -- FIXED: Update party frame text for all party members safely
                     unitframe.UpdateAllPartyFrameText()
-                    
+
                     -- Stop the timer
                     updateFrame:SetScript("OnUpdate", nil)
                 end
@@ -5918,8 +5916,10 @@ end
 
 -- Function to update party state (position, scale, orientation)
 function unitframe:UpdatePartyState(state)
-    if not unitframe.PartyMoveFrame then return end
-    
+    if not unitframe.PartyMoveFrame then
+        return
+    end
+
     -- Ensure all required values have defaults
     local safeState = {
         anchor = state.anchor or 'TOPLEFT',
@@ -5932,12 +5932,12 @@ function unitframe:UpdatePartyState(state)
         override = state.override or false,
         anchorFrame = state.anchorFrame
     }
-    
+
     local parent = UIParent
     if safeState.override and safeState.anchorFrame then
         parent = _G[safeState.anchorFrame] or UIParent
     end
-    
+
     unitframe.PartyMoveFrame:ClearAllPoints()
     unitframe.PartyMoveFrame:SetPoint(safeState.anchor, parent, safeState.anchorParent, safeState.x, safeState.y)
     unitframe.PartyMoveFrame:SetScale(safeState.scale)
@@ -5972,7 +5972,7 @@ function unitframe.InitializePartyFrameMouseover()
     for i = 1, 4 do
         local healthbar = _G['PartyMemberFrame' .. i .. 'HealthBar']
         local manabar = _G['PartyMemberFrame' .. i .. 'ManaBar']
-        
+
         if healthbar and not healthbar.DFMouseoverSet then
             healthbar:SetScript("OnEnter", function()
                 unitframe.UpdatePartyFrameText(i)
@@ -5982,7 +5982,7 @@ function unitframe.InitializePartyFrameMouseover()
             end)
             healthbar.DFMouseoverSet = true
         end
-        
+
         if manabar and not manabar.DFMouseoverSet then
             manabar:SetScript("OnEnter", function()
                 unitframe.UpdatePartyFrameText(i)
@@ -6008,25 +6008,32 @@ function unitframe.UpdatePartyFrameText(i)
     if not i or type(i) ~= "number" or i < 1 or i > 4 then
         return
     end
-    
+
     local healthbar = _G['PartyMemberFrame' .. i .. 'HealthBar']
     local manabar = _G['PartyMemberFrame' .. i .. 'ManaBar']
-    
-    if not healthbar or not manabar then return end
-    
-    local config = addon:GetConfigValue("unitframe", "party") or {}
+
+    if not healthbar or not manabar then
+        return
+    end
+
+    -- TAINT-FIX: Usar la caché segura.
+    local config = safeConfig.party or {}
     local showHealthAlways = config.showHealthTextAlways or false
     local showManaAlways = config.showManaTextAlways or false
     local textFormat = config.textFormat or "both"
     local useBreakup = config.breakUpLargeNumbers or false -- Get the breakup setting
-    
+
     -- Helper function to check mouseover (compatible with 3.3.5a)
     local function IsMouseOverBar(bar)
-        if not bar then return false end
-        local success, isOver = pcall(function() return bar:IsMouseOver() end)
+        if not bar then
+            return false
+        end
+        local success, isOver = pcall(function()
+            return bar:IsMouseOver()
+        end)
         return success and isOver
     end
-    
+
     -- Create DFLeftText and DFRightText if they don't exist (for 'both' format)
     if not healthbar.DFLeftText then
         healthbar.DFLeftText = healthbar:CreateFontString(nil, "OVERLAY", "TextStatusBarText")
@@ -6048,15 +6055,14 @@ function unitframe.UpdatePartyFrameText(i)
         manabar.DFRightText:SetPoint("RIGHT", manabar, "RIGHT", -2, 0)
         manabar.DFRightText:SetJustifyH("RIGHT")
     end
-    
-    
+
     -- Health text logic (same as target/player/focus system)
     if healthbar.DFTextString then
         local health = UnitHealth('party' .. i)
         local maxHealth = UnitHealthMax and UnitHealthMax('party' .. i) or UnitHealthMax('party' .. i)
-        
+
         local showHealthText = showHealthAlways or IsMouseOverBar(healthbar)
-        
+
         if showHealthText and health and maxHealth and maxHealth > 0 then
             local healthText = FormatStatusText(health, maxHealth, textFormat, useBreakup) -- Pass useBreakup
             if textFormat == 'both' and type(healthText) == 'table' then
@@ -6080,14 +6086,14 @@ function unitframe.UpdatePartyFrameText(i)
             healthbar.DFRightText:Hide()
         end
     end
-    
+
     -- Mana text logic (same as target/player/focus system)
     if manabar.DFTextString then
         local power = UnitPower and UnitPower('party' .. i) or UnitMana('party' .. i)
         local maxPower = UnitPowerMax and UnitPowerMax('party' .. i) or UnitManaMax('party' .. i)
-        
+
         local showManaText = showManaAlways or IsMouseOverBar(manabar)
-        
+
         if showManaText and power and maxPower and maxPower > 0 then
             local powerText = FormatStatusText(power, maxPower, textFormat, useBreakup) -- Pass useBreakup
             if textFormat == 'both' and type(powerText) == 'table' then
@@ -6122,7 +6128,7 @@ function unitframe.QueuePartyUpdate(index, updateType)
         unitframe.partyUpdateQueue[index] = {}
     end
     unitframe.partyUpdateQueue[index][updateType] = true
-    
+
     -- Register for combat end if not already registered
     if not unitframe.combatEndFrame then
         unitframe.combatEndFrame = CreateFrame("Frame")
@@ -6130,7 +6136,7 @@ function unitframe.QueuePartyUpdate(index, updateType)
         unitframe.combatEndFrame:SetScript("OnEvent", function()
             unitframe.ProcessPartyUpdateQueue()
         end)
-        
+
         -- The automatic layer monitoring system was too aggressive and caused more problems than it solved
         -- Let WoW handle its own natural layer system
     end
@@ -6140,7 +6146,7 @@ function unitframe.ProcessPartyUpdateQueue()
     if InCombatLockdown() or UnitAffectingCombat('player') then
         return -- Still in combat, wait more
     end
-    
+
     for index, updates in pairs(unitframe.partyUpdateQueue) do
         if updates.health then
             unitframe.UpdatePartyHPBar(index)
@@ -6150,7 +6156,7 @@ function unitframe.ProcessPartyUpdateQueue()
         end
         -- SIMPLIFIED: Don't call EnsurePartyFrameLayerOrder here - it was causing repositioning
     end
-    
+
     -- Clear queue
     unitframe.partyUpdateQueue = {}
 end
@@ -6160,23 +6166,25 @@ function unitframe.EnsurePartyFrameLayerOrder(index)
     if InCombatLockdown() or UnitAffectingCombat('player') then
         return
     end
-    
+
     local pf = _G['PartyMemberFrame' .. index]
-    if not pf then return end
-    
+    if not pf then
+        return
+    end
+
     local healthBar = _G['PartyMemberFrame' .. index .. 'HealthBar']
     local manaBar = _G['PartyMemberFrame' .. index .. 'ManaBar']
-    
+
     -- FIXED: Set correct frame levels per WoW 3.3.5a layering system
     -- Border is on BORDER DrawLayer, functional elements should be above it
     if healthBar then
         healthBar:SetFrameLevel(5)
     end
-    
+
     if manaBar then
         manaBar:SetFrameLevel(5)
     end
-    
+
     -- Don't force alpha changes - causes flicker
 end
 
@@ -6185,18 +6193,18 @@ function unitframe.RefreshAllPartyFrames()
     if InCombatLockdown() or UnitAffectingCombat('player') then
         return
     end
-    
+
     for i = 1, 4 do
         local pf = _G['PartyMemberFrame' .. i]
         if pf then
             -- SIMPLIFIED: Just update the bars without touching layers
             unitframe.UpdatePartyHPBar(i)
             unitframe.UpdatePartyManaBar(i)
-            
+
             -- The original code was forcing BORDER layer which sends textures to the back
         end
     end
-    
+
     -- Safe text update for all party members
     if unitframe.UpdateAllPartyFrameText then
         unitframe.UpdateAllPartyFrameText()
@@ -6206,29 +6214,33 @@ end
 -- Function to update party health bar text and colors
 function unitframe.UpdatePartyHPBar(i)
     local healthbar = _G['PartyMemberFrame' .. i .. 'HealthBar']
-    if not healthbar then return end
-    
-    local settings = addon:GetConfigValue("unitframe", "party") or {}
+    if not healthbar then
+        return
+    end
+
+    -- TAINT-FIX: Usar la caché segura en lugar de leer la configuración directamente.
+    local settings = safeConfig.party or {}
     local health = UnitHealth('party' .. i)
     local maxHealth = UnitHealthMax and UnitHealthMax('party' .. i) or UnitHealthMax('party' .. i)
-    
+
     if not health or not maxHealth or maxHealth == 0 then
         healthbar:Hide()
         return
     end
-    
+
     healthbar:Show()
-    
+
     -- SIMPLIFIED: Don't touch frame levels or draw layers - leave them as originally set
-    
+
     -- Apply class colors if enabled
     if settings.classcolor then
         local _, class = UnitClass('party' .. i)
         if class and RAID_CLASS_COLORS[class] then
             -- Use individual -Status texture for class colors
-            healthbar:SetStatusBarTexture('Interface\\Addons\\DragonUI\\Textures\\Partyframe\\UI-HUD-UnitFrame-Party-PortraitOn-Bar-Health-Status')
+            healthbar:SetStatusBarTexture(
+                'Interface\\Addons\\DragonUI\\Textures\\Partyframe\\UI-HUD-UnitFrame-Party-PortraitOn-Bar-Health-Status')
             -- FIXED: Don't force DrawLayer - let Blizzard use default layer like normal texture
-            
+
             -- Apply dynamic clipping for status textures too
             local tex = healthbar:GetStatusBarTexture()
             if tex then
@@ -6236,12 +6248,13 @@ function unitframe.UpdatePartyHPBar(i)
                 unitframe.ApplyStatusTextureClipping(healthbar, tex)
                 local layer, sublayer = tex:GetDrawLayer()
             end
-            
+
             local color = RAID_CLASS_COLORS[class]
             healthbar:SetStatusBarColor(color.r, color.g, color.b, 1)
         else
             -- Use normal texture for unknown classes
-            healthbar:SetStatusBarTexture('Interface\\Addons\\DragonUI\\Textures\\Partyframe\\UI-HUD-UnitFrame-Party-PortraitOn-Bar-Health')
+            healthbar:SetStatusBarTexture(
+                'Interface\\Addons\\DragonUI\\Textures\\Partyframe\\UI-HUD-UnitFrame-Party-PortraitOn-Bar-Health')
             healthbar:SetStatusBarColor(1, 1, 1, 1)
             -- Also reset texture coordinates for consistency
             local tex = healthbar:GetStatusBarTexture()
@@ -6253,26 +6266,28 @@ function unitframe.UpdatePartyHPBar(i)
         -- Use coordinate-based system when class colors disabled
         healthbar:SetStatusBarTexture('Interface\\AddOns\\DragonUI\\Textures\\Partyframe\\uipartyframe')
         healthbar:SetStatusBarColor(1, 1, 1, 1)
-        
+
         -- No layer monitoring needed - using Blizzard default layers
-        
+
         -- Apply coordinates for uipartyframe.blp texture
         unitframe.SetPartyHealthBarCoords(healthbar)
     end
-    
+
     -- CRUCIAL: When using class colors, don't apply any SetTexCoord manipulations
     -- The -Status texture must maintain its original coordinates to avoid deformation
-    
+
     -- El texto se maneja ahora en UpdatePartyFrameText() como el sistema del target
 end
 
 -- Function to set health bar coordinates using uipartyframe.blp with dynamic clipping
 function unitframe.SetPartyHealthBarCoords(healthbar)
-    if not healthbar then return end
-    
+    if not healthbar then
+        return
+    end
+
     -- Coordenadas exactas para health bar
     local coords = {0.0, 0.28125, 0.6484375, 0.6953125} -- Health bar coordinates
-    
+
     -- Aplicar coordenadas con recorte dinámico desde la derecha
     local texture = healthbar:GetStatusBarTexture()
     if texture then
@@ -6280,17 +6295,17 @@ function unitframe.SetPartyHealthBarCoords(healthbar)
         local currentValue = healthbar:GetValue()
         local maxValue = select(2, healthbar:GetMinMaxValues())
         local percentage = maxValue > 0 and (currentValue / maxValue) or 1
-        
+
         -- Recortar desde la derecha según el porcentaje (misma técnica que mana)
         local adjustedCoords = {coords[1], coords[2], coords[3], coords[4]}
-        
+
         -- Calcular nueva coordenada derecha basada en el porcentaje
         local textureWidth = coords[2] - coords[1] -- Ancho total de la textura
         local newWidth = textureWidth * percentage -- Nuevo ancho según porcentaje
         adjustedCoords[2] = coords[1] + newWidth -- Nueva coordenada derecha
-        
+
         texture:SetTexCoord(adjustedCoords[1], adjustedCoords[2], adjustedCoords[3], adjustedCoords[4])
-        
+
         -- Set the texture to use our party frame texture
         texture:SetTexture('Interface\\Addons\\DragonUI\\Textures\\Partyframe\\uipartyframe')
     end
@@ -6298,30 +6313,34 @@ end
 
 -- Function to apply dynamic clipping to status textures (for class colors)
 function unitframe.ApplyStatusTextureClipping(healthbar, texture)
-    if not healthbar or not texture then return end
-    
+    if not healthbar or not texture then
+        return
+    end
+
     -- Status textures use full coordinates (0,1,0,1) but need dynamic clipping
     -- They don't use atlas coordinates like uipartyframe.blp
-    
+
     -- Obtener el porcentaje actual de vida
     local currentValue = healthbar:GetValue()
     local maxValue = select(2, healthbar:GetMinMaxValues())
     local percentage = maxValue > 0 and (currentValue / maxValue) or 1
-    
+
     -- Para status textures, recortamos desde 0 hasta el porcentaje en X
     -- Y mantenemos Y completo (0 a 1)
     local left = 0
-    local right = percentage  -- Recorte dinámico desde la derecha
+    local right = percentage -- Recorte dinámico desde la derecha
     local top = 0
     local bottom = 1
-    
+
     texture:SetTexCoord(left, right, top, bottom)
 end
 
 -- Function to update party mana bar text, colors and coordinates
 function unitframe.UpdatePartyManaBar(i)
     local manabar = _G['PartyMemberFrame' .. i .. 'ManaBar']
-    if not manabar then return end
+    if not manabar then
+        return
+    end
 
     if not UnitExists('party' .. i) then
         manabar:Hide()
@@ -6346,12 +6365,14 @@ end
 -- Function to set mana bar coordinates based on power type using uipartyframe.blp
 -- NOW WITH DYNAMIC CROPPING (Pac-Man style) - texture gets "eaten" from right to left
 function unitframe.SetPartyManaBarCoords(manabar, powerType, currentPower, maxPower)
-    if not manabar then return end
-    
+    if not manabar then
+        return
+    end
+
     -- Base coordinates for different power types in uipartyframe.blp
     local baseCoords = {}
     local color = {1, 1, 1, 1} -- Default white color
-    
+
     if powerType == 0 then -- Mana (blue)
         -- Coordenadas base para mana azul (barra grande)
         baseCoords = {0.0, 0.296875, 0.7421875, 0.77734375}
@@ -6377,16 +6398,16 @@ function unitframe.SetPartyManaBarCoords(manabar, powerType, currentPower, maxPo
         baseCoords = {0.0, 0.28125, 0.8125, 0.84765625}
         color = {0.5, 0.7, 1.0, 1} -- Azul suave
     end
-    
+
     -- MASK SIMULATION: Calculate how much of the texture to show based on current/max power
     local percentage = 1.0 -- Default to full
     if maxPower and maxPower > 0 and currentPower then
         percentage = currentPower / maxPower
     end
-    
+
     -- Aplicar la textura con coordenadas FIJAS (no modificar UV)
     manabar:SetStatusBarTexture('Interface\\AddOns\\DragonUI\\Textures\\Partyframe\\uipartyframe')
-    
+
     -- SISTEMA HÍBRIDO: UV dinámico + tamaño físico proporcional
     local texture = manabar:GetStatusBarTexture()
     if texture then
@@ -6395,35 +6416,78 @@ function unitframe.SetPartyManaBarCoords(manabar, powerType, currentPower, maxPo
         local right = baseCoords[1] + (baseCoords[2] - baseCoords[1]) * percentage
         local top = baseCoords[3]
         local bottom = baseCoords[4]
-        
+
         -- Aplicar coordenadas UV dinámicas (Pac-Man effect)
         texture:SetTexCoord(left, right, top, bottom)
-        
+
         -- FIXED: Don't manipulate texture anchoring - let WoW handle natural positioning
         -- The constant texture repositioning was causing the bars to move to the background
     end
-    
+
     -- FIXED: Don't force repositioning of the StatusBar - this was causing drift issues
     -- Let the original positioning from ChangePartyFrame() remain stable
-    
+
     -- Aplicar el color suave encima de la textura
     manabar:SetStatusBarColor(color[1], color[2], color[3], color[4])
 end
 
-
+-- FIXED: Enhanced Pet Frame function with full configuration support
 function unitframe.ChangePetFrame()
+
+     if InCombatLockdown() then return end
     local base = 'Interface\\Addons\\DragonUI\\Textures\\uiunitframe'
 
-    PetFrame:SetPoint('TOPLEFT', PlayerFrame, 'TOPLEFT', 100, -70)
+    -- Get pet configuration
+    local petConfig = addon:GetConfigValue("unitframe", "pet") or {}
+
+    -- Apply scale
+    local scale = petConfig.scale or 1.0
+    PetFrame:SetScale(scale)
+
+    -- Apply positioning
+    if petConfig.override then
+        -- FIXED: Make PetFrame movable before setting user placement
+        PetFrame:SetMovable(true)
+        PetFrame:ClearAllPoints()
+
+        -- FIXED: Use consistent default coordinates that match the non-override position
+        -- When not using override, position is 'TOPLEFT', PlayerFrame, 'TOPLEFT', 100, -70
+        -- Convert this to UIParent coordinates for override mode
+        local defaultX = petConfig.x or 200 -- Aproximadamente PlayerFrame.x + 100
+        local defaultY = petConfig.y or -150 -- Aproximadamente PlayerFrame.y - 70
+        local anchor = petConfig.anchor or 'TOPLEFT'
+        local anchorParent = petConfig.anchorParent or 'TOPLEFT'
+
+        PetFrame:SetPoint(anchor, UIParent, anchorParent, defaultX, defaultY)
+        PetFrame:SetUserPlaced(true)
+        -- FIXED: Set movable back to false to prevent accidental dragging
+        PetFrame:SetMovable(false)
+    else
+        -- Default positioning relative to PlayerFrame (unchanged)
+        PetFrame:ClearAllPoints()
+        PetFrame:SetPoint('TOPLEFT', PlayerFrame, 'TOPLEFT', 100, -70)
+    end
+
+    -- ...existing code...
     PetFrameTexture:SetTexture('')
     PetFrameTexture:Hide()
+
+    if PetFrameHealthBarText then
+        PetFrameHealthBarText:Hide()
+        PetFrameHealthBarText.Show = noop
+        PetFrameHealthBarText.SetText = noop
+    end
+    if PetFrameManaBarText then
+        PetFrameManaBarText:Hide()
+        PetFrameManaBarText.Show = noop
+        PetFrameManaBarText.SetText = noop
+    end
 
     if not frame.PetFrameBackground then
         local background = PetFrame:CreateTexture('DragonUIPetFrameBackground')
         background:SetDrawLayer('BACKGROUND', 1)
         background:SetTexture(
-            'Interface\\Addons\\DragonUI\\Textures\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-BACKGROUND'
-        )
+            'Interface\\Addons\\DragonUI\\Textures\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-BACKGROUND')
         background:SetPoint('LEFT', PetPortrait, 'CENTER', -25 + 1, -10)
         frame.PetFrameBackground = background
     end
@@ -6431,9 +6495,7 @@ function unitframe.ChangePetFrame()
     if not frame.PetFrameBorder then
         local border = PetFrameHealthBar:CreateTexture('DragonUIPetFrameBorder')
         border:SetDrawLayer('OVERLAY', 2)
-        border:SetTexture(
-            'Interface\\Addons\\DragonUI\\Textures\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-BORDER'
-        )
+        border:SetTexture('Interface\\Addons\\DragonUI\\Textures\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-BORDER')
         border:SetPoint('LEFT', PetPortrait, 'CENTER', -25 + 1, -10)
         frame.PetFrameBorder = border
     end
@@ -6442,94 +6504,341 @@ function unitframe.ChangePetFrame()
     PetFrameHealthBar:SetPoint('LEFT', PetPortrait, 'RIGHT', 1 + 1 - 2 + 0.5, 0)
     PetFrameHealthBar:SetSize(70.5, 10)
     PetFrameHealthBar:GetStatusBarTexture():SetTexture(
-        'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Health'
-    )
+        'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Health')
     PetFrameHealthBar:SetStatusBarColor(1, 1, 1, 1)
     PetFrameHealthBar.SetStatusBarColor = noop
 
-    PetFrameHealthBarText:SetPoint('CENTER', PetFrameHealthBar, 'CENTER', 0, 0)
+    -- Hook text update
+    if not PetFrameHealthBar.DragonUI_Hooked then
+        PetFrameHealthBar:HookScript("OnValueChanged", function(self)
+            unitframe.UpdatePetFrameText()
+        end)
+        PetFrameHealthBar.DragonUI_Hooked = true
+    end
+
+    -- FIXED: Create custom text elements for pet frame like other frames
+    if not frame.PetFrameHealthBarDummy then
+        local PetFrameHealthBarDummy = CreateFrame('FRAME', 'PetFrameHealthBarDummy', PetFrame)
+        PetFrameHealthBarDummy:SetAllPoints(PetFrameHealthBar)
+        PetFrameHealthBarDummy:SetFrameStrata('LOW')
+        PetFrameHealthBarDummy:SetFrameLevel(PetFrameHealthBar:GetFrameLevel() + 1)
+        PetFrameHealthBarDummy:EnableMouse(true)
+
+        frame.PetFrameHealthBarDummy = PetFrameHealthBarDummy
+
+        local t = PetFrameHealthBarDummy:CreateFontString('PetFrameHealthBarText', 'OVERLAY', 'TextStatusBarText')
+        t:SetPoint('CENTER', PetFrameHealthBarDummy, 0, 0)
+        t:SetText('HP')
+        t:Hide()
+        frame.PetFrameHealthBarText = t
+
+        -- Create dual text elements for "both" format
+        local healthTextLeft = PetFrameHealthBarDummy:CreateFontString(nil, "OVERLAY", "TextStatusBarText")
+        healthTextLeft:SetPoint("LEFT", PetFrameHealthBarDummy, "LEFT", 2, 0)
+        healthTextLeft:SetJustifyH("LEFT")
+        healthTextLeft:Hide()
+        frame.PetFrameHealthBarTextLeft = healthTextLeft
+
+        local healthTextRight = PetFrameHealthBarDummy:CreateFontString(nil, "OVERLAY", "TextStatusBarText")
+        healthTextRight:SetPoint("RIGHT", PetFrameHealthBarDummy, "RIGHT", -2, 0)
+        healthTextRight:SetJustifyH("RIGHT")
+        healthTextRight:Hide()
+        frame.PetFrameHealthBarTextRight = healthTextRight
+        
+        -- Assign scripts right after creation
+        PetFrameHealthBarDummy:SetScript('OnEnter', function(self)
+            unitframe.UpdatePetFrameText()
+        end)
+
+        PetFrameHealthBarDummy:SetScript('OnLeave', function(self)
+            unitframe.UpdatePetFrameText()
+        end)
+    end
 
     PetFrameManaBar:ClearAllPoints()
     PetFrameManaBar:SetPoint('LEFT', PetPortrait, 'RIGHT', 1 - 2 - 1.5 + 1 - 2 + 0.5, 2 - 10 - 1)
     PetFrameManaBar:SetSize(74, 7.5)
-    PetFrameManaBar:GetStatusBarTexture():SetTexture(
-        'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Mana'
-    )
-    -- FIXED: Don't force specific colors initially, let WoW handle native colors
+    if UnitExists("pet") then
+        local powerType, powerTypeString = UnitPowerType('pet')
+        local texturePath = 'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\'
+        if powerTypeString == 'MANA' then
+            texturePath = texturePath .. 'UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Mana'
+        elseif powerTypeString == 'FOCUS' then
+            texturePath = texturePath .. 'UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Focus'
+        elseif powerTypeString == 'RAGE' then
+            texturePath = texturePath .. 'UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Rage'
+        elseif powerTypeString == 'ENERGY' then
+            texturePath = texturePath .. 'UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Energy'
+        elseif powerTypeString == 'RUNIC_POWER' then
+            texturePath = texturePath .. 'UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-RunicPower'
+        else
+            texturePath = texturePath .. 'UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Mana'
+        end
+        PetFrameManaBar:GetStatusBarTexture():SetTexture(texturePath)
+    else
+        -- Si no hay mascota, ponemos la de maná por defecto
+        PetFrameManaBar:GetStatusBarTexture():SetTexture(
+            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Mana')
+    end
     PetFrameManaBar:GetStatusBarTexture():SetVertexColor(1, 1, 1, 1)
 
+    if not PetFrameManaBar.DragonUI_Hooked then
+        PetFrameManaBar:HookScript("OnValueChanged", function(self)
+            unitframe.UpdatePetFrameText()
+        end)
+        PetFrameManaBar.DragonUI_Hooked = true
+    end
+
+    -- FIXED: Create custom mana text elements for pet frame
+    if not frame.PetFrameManaBarDummy then
+        local PetFrameManaBarDummy = CreateFrame('FRAME', 'PetFrameManaBarDummy', PetFrame)
+        PetFrameManaBarDummy:SetAllPoints(PetFrameManaBar)
+        PetFrameManaBarDummy:SetFrameStrata('LOW')
+        PetFrameManaBarDummy:SetFrameLevel(PetFrameManaBar:GetFrameLevel() + 1)
+        PetFrameManaBarDummy:EnableMouse(true)
+
+        frame.PetFrameManaBarDummy = PetFrameManaBarDummy
+
+        local t = PetFrameManaBarDummy:CreateFontString('PetFrameManaBarText', 'OVERLAY', 'TextStatusBarText')
+        t:SetPoint('CENTER', PetFrameManaBarDummy, 0, 0)
+        t:SetText('MANA')
+        t:Hide()
+        frame.PetFrameManaBarText = t
+
+        -- Create dual text elements for "both" format
+        local manaTextLeft = PetFrameManaBarDummy:CreateFontString(nil, "OVERLAY", "TextStatusBarText")
+        manaTextLeft:SetPoint("LEFT", PetFrameManaBarDummy, "LEFT", 2, 0)
+        manaTextLeft:SetJustifyH("LEFT")
+        manaTextLeft:Hide()
+        frame.PetFrameManaBarTextLeft = manaTextLeft
+
+        local manaTextRight = PetFrameManaBarDummy:CreateFontString(nil, "OVERLAY", "TextStatusBarText")
+        manaTextRight:SetPoint("RIGHT", PetFrameManaBarDummy, "RIGHT", -2, 0)
+        manaTextRight:SetJustifyH("RIGHT")
+        manaTextRight:Hide()
+        frame.PetFrameManaBarTextRight = manaTextRight
+        
+        -- Assign scripts right after creation
+        PetFrameManaBarDummy:SetScript('OnEnter', function(self)
+            unitframe.UpdatePetFrameText()
+        end)
+
+        PetFrameManaBarDummy:SetScript('OnLeave', function(self)
+            unitframe.UpdatePetFrameText()
+        end)
+    end
+
     frame.UpdatePetManaBarTexture = function()
-        -- FIXED: Using the exact same logic as the working PortacionDragonfligthUI addon
         local powerType, powerTypeString = UnitPowerType('pet')
 
         if powerTypeString == 'MANA' then
             PetFrameManaBar:GetStatusBarTexture():SetTexture(
-                'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Mana'
-            )
+                'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Mana')
         elseif powerTypeString == 'FOCUS' then
             PetFrameManaBar:GetStatusBarTexture():SetTexture(
-                'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Focus'
-            )
+                'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Focus')
         elseif powerTypeString == 'RAGE' then
             PetFrameManaBar:GetStatusBarTexture():SetTexture(
-                'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Rage'
-            )
+                'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Rage')
         elseif powerTypeString == 'ENERGY' then
             PetFrameManaBar:GetStatusBarTexture():SetTexture(
-                'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Energy'
-            )
+                'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-Energy')
         elseif powerTypeString == 'RUNIC_POWER' then
             PetFrameManaBar:GetStatusBarTexture():SetTexture(
-                'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-RunicPower'
-            )
+                'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-TargetofTarget-PortraitOn-Bar-RunicPower')
         end
 
-        -- EXACT SAME as working addon: Only set vertex color, NO SetStatusBarColor, NO UnitFrameManaBar_UpdateType
         PetFrameManaBar:GetStatusBarTexture():SetVertexColor(1, 1, 1, 1)
     end
 
-    hooksecurefunc(
-        'PetFrame_Update',
-        function(self)
-            frame.UpdatePetManaBarTexture()
-        end
-    )
+    hooksecurefunc('PetFrame_Update', function(self)
+        frame.UpdatePetManaBarTexture()
+    end)
 
-    local dx = 2
-    -- health vs mana bar
-    local deltaSize = 74 - 70.5
-
-    local newPetTextScale = 0.8
-
+    -- Position name
     PetName:ClearAllPoints()
     PetName:SetPoint('LEFT', PetPortrait, 'RIGHT', 1 + 1, 2 + 12 - 1)
 
-    PetFrameHealthBarText:SetPoint('CENTER', PetFrameHealthBar, 'CENTER', 0, 0)
-    --PetFrameHealthBarTextLeft:SetPoint('LEFT', PetFrameHealthBar, 'LEFT', dx, 0)
-    --PetFrameHealthBarTextRight:SetPoint('RIGHT', PetFrameHealthBar, 'RIGHT', -dx, 0)
+    -- Hide original Blizzard text elements
+    PetFrameHealthBarText:Hide()
+    PetFrameManaBarText:Hide()
 
-    --PetFrameHealthBarText:SetScale(newPetTextScale)
-    --PetFrameHealthBarTextLeft:SetScale(newPetTextScale)
-    --PetFrameHealthBarTextRight:SetScale(newPetTextScale)
+    -- Apply initial text visibility based on settings
+    unitframe.UpdatePetFrameText()
 
-    PetFrameManaBarText:SetPoint('CENTER', PetFrameManaBar, 'CENTER', deltaSize / 2, 0)
-    --PetFrameManaBarTextLeft:ClearAllPoints()
-    --PetFrameManaBarTextLeft:SetPoint('LEFT', PetFrameManaBar, 'LEFT', deltaSize + dx + 1.5, 0)
-    --PetFrameManaBarTextRight:SetPoint('RIGHT', PetFrameManaBar, 'RIGHT', -dx, 0)
+    -- Update visibility based on individual showTextAlways settings for Pet
+    if addon and addon.db and addon.db.profile and addon.db.profile.unitframe then
+        local config = addon.db.profile.unitframe.pet or {}
+        local showHealthAlways = config.showHealthTextAlways or false
+        local showManaAlways = config.showManaTextAlways or false
 
-    --PetFrameManaBarText:SetScale(newPetTextScale)
-    --PetFrameManaBarTextLeft:SetScale(newPetTextScale)
-    --PetFrameManaBarTextRight:SetScale(newPetTextScale)
-    
-    -- FIXED: Ensure proper pet frame visibility based on pet existence
-    if UnitExists("pet") then
-        PetFrame:Show()
-        -- FIXED: Call UpdatePetManaBarTexture immediately after setting up the pet frame
-        frame.UpdatePetManaBarTexture()
-    else
-        PetFrame:Hide()
+        -- Handle health text visibility
+        if showHealthAlways and UnitExists('pet') then
+            local health = UnitHealth('pet') or 0
+            local maxHealth = UnitHealthMax('pet') or 1
+            local textFormat = config.textFormat or 'numeric'
+            local useBreakup = config.breakUpLargeNumbers or false
+
+            if maxHealth > 0 then
+                local healthText = FormatStatusText(health, maxHealth, textFormat, useBreakup, "pet")
+
+                if textFormat == "both" and type(healthText) == "table" then
+                    if frame.PetFrameHealthBarTextLeft and frame.PetFrameHealthBarTextRight then
+                        frame.PetFrameHealthBarTextLeft:SetText(healthText.percentage)
+                        frame.PetFrameHealthBarTextRight:SetText(healthText.current)
+                        frame.PetFrameHealthBarTextLeft:Show()
+                        frame.PetFrameHealthBarTextRight:Show()
+                    end
+                    if frame.PetFrameHealthBarText then
+                        frame.PetFrameHealthBarText:Hide()
+                    end
+                else
+                    if frame.PetFrameHealthBarText then
+                        local displayText = type(healthText) == "table" and healthText.combined or healthText
+                        frame.PetFrameHealthBarText:SetText(displayText)
+                        frame.PetFrameHealthBarText:Show()
+                    end
+                    if frame.PetFrameHealthBarTextLeft then
+                        frame.PetFrameHealthBarTextLeft:Hide()
+                    end
+                    if frame.PetFrameHealthBarTextRight then
+                        frame.PetFrameHealthBarTextRight:Hide()
+                    end
+                end
+            end
+        end
+
+        -- Handle mana text visibility
+        if showManaAlways and UnitExists('pet') then
+            local power = UnitPower('pet') or 0
+            local maxPower = UnitPowerMax('pet') or 1
+            local textFormat = config.textFormat or 'numeric'
+            local useBreakup = config.breakUpLargeNumbers or false
+
+            if maxPower > 0 then
+                local powerText = FormatStatusText(power, maxPower, textFormat, useBreakup, "pet")
+
+                if textFormat == "both" and type(powerText) == "table" then
+                    if frame.PetFrameManaBarTextLeft and frame.PetFrameManaBarTextRight then
+                        frame.PetFrameManaBarTextLeft:SetText(powerText.percentage)
+                        frame.PetFrameManaBarTextRight:SetText(powerText.current)
+                        frame.PetFrameManaBarTextLeft:Show()
+                        frame.PetFrameManaBarTextRight:Show()
+                    end
+                    if frame.PetFrameManaBarText then
+                        frame.PetFrameManaBarText:Hide()
+                    end
+                else
+                    if frame.PetFrameManaBarText then
+                        local displayText = type(powerText) == "table" and powerText.combined or powerText
+                        frame.PetFrameManaBarText:SetText(displayText)
+                        frame.PetFrameManaBarText:Show()
+                    end
+                    if frame.PetFrameManaBarTextLeft then
+                        frame.PetFrameManaBarTextLeft:Hide()
+                    end
+                    if frame.PetFrameManaBarTextRight then
+                        frame.PetFrameManaBarTextRight:Hide()
+                    end
+                end
+            end
+        end
     end
+-- =====================================================================
+    -- START: DEFINITIVE TAINT-PROOF PET THREAT SYSTEM
+    -- Replace the old "Threat Glow logic for Pet" block with this one.
+    -- =====================================================================
+    if not frame.PetThreatSystemInitialized then
+        -- 1. Guardamos la función original de Blizzard antes de modificarla.
+        if not unitframe.originalPetFrameFlashShow then
+            unitframe.originalPetFrameFlashShow = PetFrameFlash.Show
+        end
+
+        -- 2. Creamos una función vacía que no hace nada. Será nuestro "interruptor de apagado".
+        local function disabledGlow()
+            -- Esta función está vacía a propósito.
+        end
+
+        -- 3. Creamos la función de control que se llamará desde el menú de opciones.
+        --    Es SEGURA porque solo se llama al hacer clic en la casilla, nunca en combate.
+        function unitframe.TogglePetThreatGlow(enabled)
+            if enabled then
+                -- Si el usuario quiere el brillo, restauramos la función original de Blizzard.
+                PetFrameFlash.Show = unitframe.originalPetFrameFlashShow
+            else
+                -- Si el usuario NO quiere el brillo, reemplazamos la función de Blizzard por la nuestra vacía.
+                PetFrameFlash.Show = disabledGlow
+                PetFrameFlash:Hide() -- También lo ocultamos ahora por si ya se estaba mostrando.
+            end
+        end
+
+        -- 4. Aplicamos la configuración guardada cuando se carga la UI por primera vez.
+        local petConfig = addon:GetConfigValue("unitframe", "pet") or {}
+        local threatEnabled = petConfig.enableThreatGlow
+        if threatEnabled == nil then threatEnabled = true end -- Por defecto, activado.
+        unitframe.TogglePetThreatGlow(threatEnabled)
+
+        frame.PetThreatSystemInitialized = true
+    end
+    -- =====================================================================
+    -- END: DEFINITIVE TAINT-PROOF PET THREAT SYSTEM
+    -- =====================================================================
 end
+
+-- FIXED: Create options for pet frame with proper defaults
+local optionsPet = CreateUnitFrameOptions('Pet', 'Pet Frame Settings', 'pet')
+
+-- FIXED: Override pet frame defaults to match the non-override position
+optionsPet.args.x.min = -2500
+optionsPet.args.x.max = 2500
+optionsPet.args.x.bigStep = 1
+-- FIXED: Set better default description that reflects actual default values
+optionsPet.args.x.desc = 'X relative to *ANCHOR* (Default: 200 when override enabled)'
+
+optionsPet.args.y.min = -2500
+optionsPet.args.y.max = 2500
+optionsPet.args.y.bigStep = 1
+-- FIXED: Set better default description that reflects actual default values
+optionsPet.args.y.desc = 'Y relative to *ANCHOR* (Default: -150 when override enabled)'
+
+-- FIXED: Add pet-specific options like player and target frames
+optionsPet.args.showHealthTextAlways = {
+    type = 'toggle',
+    name = 'Always Show Health Text',
+    desc = 'Always display health text (otherwise only on mouseover)',
+    order = 15.3
+}
+optionsPet.args.showManaTextAlways = {
+    type = 'toggle',
+    name = 'Always Show Mana Text',
+    desc = 'Always display mana/energy/rage text (otherwise only on mouseover)',
+    order = 15.4
+}
+
+-- ADD THIS NEW OPTION FOR THE PET THREAT GLOW
+optionsPet.args.enableThreatGlow = {
+    type = 'toggle',
+    name = 'Enable Threat Glow',
+    desc = 'Shows a flashing red glow on the pet frame when it has aggro.',
+    order = 16,
+    get = function(info)
+        local value = getOption(info)
+        if value == nil then
+            return true
+        end
+        return value
+    end,
+    set = function(info, value)
+        -- Esta función guarda la nueva configuración y llama a nuestro controlador seguro.
+        setOption(info, value)
+        -- CRÍTICO: Esto llama a nuestra nueva función de control, que es segura.
+        -- Solo se ejecuta al hacer clic en la opción, nunca en combate.
+        if unitframe.TogglePetThreatGlow then
+            unitframe.TogglePetThreatGlow(value)
+        end
+        addon:RefreshPetFrame()
+    end
+}
 
 function unitframe.CreateRestFlipbook()
     if not frame.RestIcon then
@@ -6559,56 +6868,37 @@ function unitframe.CreateRestFlipbook()
 end
 
 function unitframe.HookRestFunctions()
-    hooksecurefunc(
-        PlayerStatusGlow,
-        'Show',
-        function()
-            PlayerStatusGlow:Hide()
-        end
-    )
+    hooksecurefunc(PlayerStatusGlow, 'Show', function()
+        PlayerStatusGlow:Hide()
+    end)
 
-    hooksecurefunc(
-        PlayerRestIcon,
-        'Show',
-        function()
-            PlayerRestIcon:Hide()
-        end
-    )
+    hooksecurefunc(PlayerRestIcon, 'Show', function()
+        PlayerRestIcon:Hide()
+    end)
 
-    hooksecurefunc(
-        PlayerRestGlow,
-        'Show',
-        function()
-            PlayerRestGlow:Hide()
-        end
-    )
+    hooksecurefunc(PlayerRestGlow, 'Show', function()
+        PlayerRestGlow:Hide()
+    end)
 
     -- FIXED: Hide Blizzard's player frame combat flash that conflicts with DragonUI custom combat glow
     if PlayerFrameFlash then
-        hooksecurefunc(
-            PlayerFrameFlash,
-            'Show',
-            function()
-                PlayerFrameFlash:Hide()
-            end
-        )
+        hooksecurefunc(PlayerFrameFlash, 'Show', function()
+            PlayerFrameFlash:Hide()
+        end)
         -- Also set empty texture to prevent any residual display
         PlayerFrameFlash:SetTexture('')
     end
 
-    hooksecurefunc(
-        'SetUIVisibility',
-        function(visible)
-            if visible then
-                PlayerFrame_UpdateStatus()
-            else
-                if frame.RestIcon then
-                    frame.RestIcon:Hide()
-                    frame.RestIconAnimation:Stop()
-                end
+    hooksecurefunc('SetUIVisibility', function(visible)
+        if visible then
+            PlayerFrame_UpdateStatus()
+        else
+            if frame.RestIcon then
+                frame.RestIcon:Hide()
+                frame.RestIconAnimation:Stop()
             end
         end
-    )
+    end)
 end
 
 ------------------------------------------
@@ -6638,7 +6928,7 @@ function eventFrame:OnEvent(event, arg1)
             unitframe.UpdatePartyManaBar(partyIndex)
         end
     elseif event == 'UNIT_POWER_UPDATE' then
-    -- WoW 3.3.5a specific mana events
+        -- WoW 3.3.5a specific mana events
     elseif event == 'UNIT_MANA' and string.match(arg1, '^party[1-4]$') then
         -- Update party frame mana when mana changes (3.3.5a specific)
         local partyIndex = tonumber(string.match(arg1, 'party([1-4])'))
@@ -6671,7 +6961,7 @@ function eventFrame:OnEvent(event, arg1)
         unitframe.ChangePlayerframe()
         unitframe.ChangeTargetFrame()
         unitframe.ReApplyTargetFrame()
-        unitframe.ReApplyToTFrame()  -- FIXED: Use correct function name
+        unitframe.ReApplyToTFrame() -- FIXED: Use correct function name
         unitframe.ChangeStatusIcons()
         unitframe.CreateRestFlipbook()
         unitframe.ChangeFocusFrame()
@@ -6679,29 +6969,29 @@ function eventFrame:OnEvent(event, arg1)
         unitframe.ChangePetFrame()
 
         unitframe:ApplySettings()
-        
+
         -- Force update of resting state after everything is configured
         if PlayerFrame_UpdateStatus then
             PlayerFrame_UpdateStatus()
         end
     elseif event == 'PLAYER_TARGET_CHANGED' then
-        --unitframe.ApplySettings()
+        -- unitframe.ApplySettings()
         unitframe.ReApplyTargetFrame()
-        unitframe.ReApplyToTFrame()  -- FIXED: Use correct function name
+        unitframe.ReApplyToTFrame() -- FIXED: Use correct function name
         unitframe.ChangePlayerframe()
-        
+
         -- FIXED: Clear target frame texts and update immediately when target changes
         unitframe.ClearTargetFrameTexts()
         unitframe.UpdateTargetFrameText()
-        
+
         -- FIXED: Update player frame only if settings require it (independent of target)
         local config = addon.db.profile.unitframe and addon.db.profile.unitframe.player or {}
         local showHealthAlways = config.showHealthTextAlways or false
         local showManaAlways = config.showManaTextAlways or false
-        
+
         -- Only update player frame if texts should always be shown, regardless of target
         if showHealthAlways or showManaAlways then
-            unitframe.UpdatePlayerFrameText()
+            unitframe.SafeUpdatePlayerFrameText()
         else
             -- If texts shouldn't always be shown, clear them to respect the setting
             unitframe.ClearPlayerFrameTexts()
@@ -6731,8 +7021,8 @@ eventFrame:SetScript('OnEvent', eventFrame.OnEvent)
 ------------------------------------------
 -- Register core events for all unit frames
 eventFrame:RegisterEvent('UNIT_HEALTH')
-eventFrame:RegisterEvent('UNIT_MANA')           -- FIXED: Add specific WoW 3.3.5a mana event
-eventFrame:RegisterEvent('UNIT_MAXMANA')        -- FIXED: Add specific WoW 3.3.5a max mana event
+eventFrame:RegisterEvent('UNIT_MANA') -- FIXED: Add specific WoW 3.3.5a mana event
+eventFrame:RegisterEvent('UNIT_MAXMANA') -- FIXED: Add specific WoW 3.3.5a max mana event
 eventFrame:RegisterEvent('UNIT_POWER_UPDATE')
 eventFrame:RegisterEvent('PLAYER_ENTERING_WORLD')
 eventFrame:RegisterEvent('PLAYER_TARGET_CHANGED')
@@ -6754,13 +7044,14 @@ frameInit:SetScript("OnEvent", function(self, event, ...)
         local addonName = ...
         if addonName == "DragonUI" then
             unitframe:Initialize()
+            unitframe.UpdateSafeConfig()
             -- Crear el RestIcon personalizado de DragonflightUI
             unitframe.CreateRestFlipbook()
             -- Registrar el hook para actualizar el estado del player frame (incluye el icono de descanso)
             unitframe.HookPlayerStatus()
             -- Ocultar los iconos de rest de Blizzard para usar los nuestros
             unitframe.HookRestFunctions()
-            
+
             -- FIXED: If player is already in world (reload case), execute OnEnable logic
             if UnitExists("player") then
                 unitframe:OnEnable()
@@ -6780,39 +7071,11 @@ frameInit:SetScript("OnEvent", function(self, event, ...)
     end
 end)
 
--- Funci?n para refrescar configuraci?n llamada desde core.lua
-function unitframe:RefreshSettings()
-    if unitframe.ApplySettings then
-        unitframe:ApplySettings()
-    end
-end
-
--- Funci?n global para refrescar los unit frames
-function addon:Refreshunitframe()
-    -- Refresh positioning and visual elements
-    if PlayerFrame and TargetFrame then
-        unitframe.CreatePlayerFrameTextures()
-        unitframe.ChangePlayerframe()
-        unitframe.ChangeTargetFrame()
-        unitframe.ReApplyTargetFrame()
-        unitframe.ChangeStatusIcons()
-        if FocusFrame then
-            unitframe.ChangeFocusFrame()
-            unitframe.ReApplyFocusFrame()
-        end
-        
-        -- CRITICAL: Also initialize party frames when configurations are refreshed
-        -- FIXED: Reset party frame state for proper reload behavior
-        if unitframe.PartyMoveFrame then
-            unitframe.PartyMoveFrame = nil -- Clear reference to force proper recreation
-        else
-        end
-        unitframe.ChangePartyFrame()
-        
-        -- Update text displays with new format using existing function
-        unitframe.UpdateAllTextDisplays()
-    end
-end
+-- REMOVED OLD REFRESH FUNCTIONS --
+-- These are no longer needed thanks to the new master addon:RefreshUnitFrames() system.
+-- function unitframe:RefreshSettings() ... end
+-- function addon:Refreshunitframe() ... end
+--
 
 -- Create event frame for automatic text updates (3.3.5a compatible)
 local textUpdateFrame = CreateFrame("Frame")
@@ -6836,6 +7099,7 @@ textUpdateFrame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 textUpdateFrame:RegisterEvent("UNIT_DISPLAYPOWER") -- Power type changes
 -- Add ToT specific events
 textUpdateFrame:RegisterEvent("UNIT_TARGET") -- Target of target changes
+textUpdateFrame:RegisterEvent("ADDON_LOADED")
 
 -- Note: ToT name text updates are handled by the OnUpdate hook in StyleToTFrame() for efficiency
 
@@ -6849,9 +7113,10 @@ totUpdateFrame:SetScript("OnUpdate", function(self, elapsed)
         if TargetFrameToT and TargetFrameToT:IsShown() and UnitExists('targettarget') then
             local currentName = UnitName('targettarget')
             local displayedName = TargetFrameToTTextureFrameName and TargetFrameToTTextureFrameName:GetText()
-            
+
             -- Only update if the name has changed or if text is not visible
-            if currentName and (not displayedName or displayedName ~= currentName or not TargetFrameToTTextureFrameName:IsShown()) then
+            if currentName and
+                (not displayedName or displayedName ~= currentName or not TargetFrameToTTextureFrameName:IsShown()) then
                 unitframe.UpdateToTNameText()
             end
         end
@@ -6871,7 +7136,7 @@ local function HookTargetManaUpdates()
             end
         end)
     end
-    
+
     -- Also hook the standard UnitFrameManaBar_Update function if it exists
     if UnitFrameManaBar_Update then
         hooksecurefunc("UnitFrameManaBar_Update", function(manabar, unit)
@@ -6889,7 +7154,7 @@ local function DisableBlizzardPartyText()
     for i = 1, 4 do
         local healthbar = _G['PartyMemberFrame' .. i .. 'HealthBar']
         local manabar = _G['PartyMemberFrame' .. i .. 'ManaBar']
-        
+
         if healthbar then
             -- Disable ALL possible Blizzard health text elements
             if healthbar.TextString then
@@ -6911,7 +7176,7 @@ local function DisableBlizzardPartyText()
             healthbar:SetScript("OnEnter", nil)
             healthbar:SetScript("OnLeave", nil)
         end
-        
+
         if manabar then
             -- Disable ALL possible Blizzard mana text elements
             if manabar.TextString then
@@ -6934,7 +7199,7 @@ local function DisableBlizzardPartyText()
             manabar:SetScript("OnLeave", nil)
         end
     end
-    
+
     -- Also hook TextStatusBar_UpdateTextString to prevent any text updates
     if TextStatusBar_UpdateTextString then
         local originalTextStatusBarUpdate = TextStatusBar_UpdateTextString
@@ -6947,12 +7212,12 @@ local function DisableBlizzardPartyText()
             elseif name and (string.match(name, "PlayerFrame") or string.match(name, "TargetFrame")) then
                 -- FIXED: For player/target frames, apply our large numbers formatting
                 originalTextStatusBarUpdate(statusbar)
-                
+
                 -- Apply large numbers formatting if enabled
                 if statusbar.TextString and addon and addon.db and addon.db.profile and addon.db.profile.unitframe then
                     local frameType = string.match(name, "PlayerFrame") and "player" or "target"
                     local config = addon.db.profile.unitframe[frameType]
-                    
+
                     if config and config.breakUpLargeNumbers then
                         local text = statusbar.TextString:GetText()
                         if text and string.match(text, "%d+") then
@@ -6994,7 +7259,7 @@ local function HookPartyFrameUpdates()
     for i = 1, 4 do
         local healthbar = _G['PartyMemberFrame' .. i .. 'HealthBar']
         local manabar = _G['PartyMemberFrame' .. i .. 'ManaBar']
-        
+
         if healthbar and healthbar.SetValue then
             hooksecurefunc(healthbar, "SetValue", function(self, value)
                 if UnitExists('party' .. i) then
@@ -7003,7 +7268,7 @@ local function HookPartyFrameUpdates()
                 end
             end)
         end
-        
+
         -- Hook manabar SetValue for immediate updates (3.3.5a compatibility)
         if manabar and manabar.SetValue then
             hooksecurefunc(manabar, "SetValue", function(self, value)
@@ -7035,24 +7300,18 @@ hookFrame:SetScript("OnEvent", function(self, event, addonName)
         HookPartyFrameUpdates()
         DisableBlizzardPartyText()
         unitframe.InitializePartyFrameMouseover()
-        
-        -- Force initial update of all party mana bars after a short delay
-        local initTimer = C_Timer and C_Timer.After or function(delay, func)
-            local frame = CreateFrame("Frame")
-            frame.elapsed = 0
-            frame:SetScript("OnUpdate", function(self, elapsed)
-                self.elapsed = self.elapsed + elapsed
-                if self.elapsed >= delay then
-                    self:SetScript("OnUpdate", nil)
-                    func()
-                end
-            end)
-        end
-        
-        initTimer(1, function()
-            unitframe.ForceUpdateAllPartyManaBars()
+
+        -- Force initial update of all party mana bars after a short delay using WoW 3.3.5a compatible timer
+        local delayFrame = CreateFrame("Frame")
+        local delayTime = 0
+        delayFrame:SetScript("OnUpdate", function(self, elapsed)
+            delayTime = delayTime + elapsed
+            if delayTime >= 1.0 then -- Wait 1 second
+                unitframe.ForceUpdateAllPartyManaBars()
+                self:SetScript("OnUpdate", nil) -- Stop the timer
+            end
         end)
-        
+
         self:UnregisterEvent("ADDON_LOADED")
     end
 end)
@@ -7062,9 +7321,11 @@ textUpdateFrame:SetScript("OnEvent", function(self, event, unit)
     if event == "PLAYER_ENTERING_WORLD" then
         unitframe.UpdateAllTextDisplays()
         -- FIXED: Use selective update on world enter based on settings
-        local config = addon.db and addon.db.profile and addon.db.profile.unitframe and addon.db.profile.unitframe.player
+        local config = addon.db and addon.db.profile and addon.db.profile.unitframe and
+                           addon.db.profile.unitframe.player
         if config then
-            unitframe.UpdatePlayerFrameTextSelective(config.showHealthTextAlways or false, config.showManaTextAlways or false)
+            unitframe.UpdatePlayerFrameTextSelective(config.showHealthTextAlways or false,
+                config.showManaTextAlways or false)
         end
         unitframe.UpdateTargetFrameText()
 
@@ -7076,9 +7337,11 @@ textUpdateFrame:SetScript("OnEvent", function(self, event, unit)
         unitframe.ChangePlayerframe()
         unitframe.ForcePlayerFrameColors()
         -- FIXED: Use selective update on level up based on settings
-        local config = addon.db and addon.db.profile and addon.db.profile.unitframe and addon.db.profile.unitframe.player
+        local config = addon.db and addon.db.profile and addon.db.profile.unitframe and
+                           addon.db.profile.unitframe.player
         if config then
-            unitframe.UpdatePlayerFrameTextSelective(config.showHealthTextAlways or false, config.showManaTextAlways or false)
+            unitframe.UpdatePlayerFrameTextSelective(config.showHealthTextAlways or false,
+                config.showManaTextAlways or false)
         end
     elseif event == "PLAYER_TARGET_CHANGED" or event == "PLAYER_FOCUS_CHANGED" then
         -- FIXED: Improved handling of target/focus changes with proper separation
@@ -7091,15 +7354,16 @@ textUpdateFrame:SetScript("OnEvent", function(self, event, unit)
         elseif event == "PLAYER_FOCUS_CHANGED" then
             unitframe.UpdateFocusText()
         end
-    elseif (event == "UNIT_HEALTH" or event == "UNIT_MANA" or event == "UNIT_MAXMANA" or event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT" or event == "UNIT_MAXPOWER" or event == "UNIT_DISPLAYPOWER") then
+    elseif (event == "UNIT_HEALTH" or event == "UNIT_MANA" or event == "UNIT_MAXMANA" or event == "UNIT_POWER_UPDATE" or
+        event == "UNIT_POWER_FREQUENT" or event == "UNIT_MAXPOWER" or event == "UNIT_DISPLAYPOWER") then
         -- FIXED: Handle unit events without triggering hover logic for player
         if unit == "target" then
             -- Simple robust function that handles both health and mana
             unitframe.UpdateTargetFrameText()
-        elseif unit == "focus" then
+         elseif unit == "focus" then
             unitframe.UpdateFocusText()
         elseif unit == "pet" then
-            unitframe.UpdatePetFrameText()
+            unitframe.UpdatePetFrameText() 
             if event == "UNIT_POWER_UPDATE" then
                 -- FIXED: Handle pet power type changes
                 if UnitExists("pet") and frame.UpdatePetManaBarTexture then
@@ -7109,8 +7373,8 @@ textUpdateFrame:SetScript("OnEvent", function(self, event, unit)
         elseif unit == "target" and event == "UNIT_TARGET" then
             -- FIXED: Handle target of target changes - apply textures and colors properly
             if UnitExists('targettarget') then
-                unitframe.StyleToTFrame()  -- Apply positioning and textures first
-                unitframe.ReApplyToTFrame()  -- Then apply colors
+                unitframe.StyleToTFrame() -- Apply positioning and textures first
+                unitframe.ReApplyToTFrame() -- Then apply colors
                 unitframe.UpdateToTPowerBarTexture() -- Update power type texture
             end
         elseif unit == "targettarget" then
@@ -7125,8 +7389,8 @@ textUpdateFrame:SetScript("OnEvent", function(self, event, unit)
         elseif unit == "focus" and event == "UNIT_TARGET" then
             -- FIXED: Handle focus target of target changes
             if UnitExists('focustarget') then
-                unitframe.StyleFocusToTFrame()  -- Apply positioning and textures first
-                unitframe.ReApplyFocusToTFrame()  -- Then apply colors
+                unitframe.StyleFocusToTFrame() -- Apply positioning and textures first
+                unitframe.ReApplyFocusToTFrame() -- Then apply colors
                 unitframe.UpdateFocusToTPowerBarTexture() -- Update power type texture
             else
                 -- Focus has no target - hide the name text
@@ -7137,25 +7401,28 @@ textUpdateFrame:SetScript("OnEvent", function(self, event, unit)
                 unitframe.ReApplyFocusToTFrame() -- Update colors and textures
                 unitframe.UpdateFocusToTPowerBarTexture() -- Update power type texture
             end
-        -- Already handled by UnitFrameManaBar_Update hook
+            -- Already handled by UnitFrameManaBar_Update hook
         end
-    elseif event == "UNIT_PET" and unit == "player" then
+   elseif event == "UNIT_PET" and unit == "player" then
         -- FIXED: Handle pet summon/dismiss events
         if UnitExists("pet") then
             -- Pet was summoned, ensure pet frame is properly styled
             unitframe.ChangePetFrame()
-            if PetFrame then
-                PetFrame:Show()
-            end
+            -- REMOVED: PetFrame:Show() is a protected function and causes taint.
+            -- The game will handle showing the frame automatically.
+            -- if PetFrame then
+            --     PetFrame:Show()
+            -- end
             -- FIXED: Also update pet power bar texture after pet summon
             if frame.UpdatePetManaBarTexture then
                 frame.UpdatePetManaBarTexture()
             end
         else
             -- Pet was dismissed, hide pet frame
-            if PetFrame then
-                PetFrame:Hide()
-            end
+            -- REMOVED: PetFrame:Hide() is also protected. The game handles this.
+            -- if PetFrame then
+            --     PetFrame:Hide()
+            -- end
         end
     elseif event == "PET_UI_UPDATE" then
         -- FIXED: Handle pet UI updates
@@ -7167,6 +7434,54 @@ textUpdateFrame:SetScript("OnEvent", function(self, event, unit)
             if frame.UpdatePetManaBarTexture then
                 frame.UpdatePetManaBarTexture()
             end
+        end
+        -- FIXED: Cambiar VARIABLES_LOADED por un evento más apropiado
+    elseif event == "ADDON_LOADED" then
+        local addonName = unit -- En ADDON_LOADED, unit es el nombre del addon
+        if addonName == "DragonUI" then
+            -- FIXED: Complete pet frame refresh when addon reloads
+            if UnitExists("pet") then
+                -- Get the pet configuration
+                local petConfig = addon:GetConfigValue("unitframe", "pet") or {}
+
+                -- Apply scale
+                local scale = petConfig.scale or 1.0
+                PetFrame:SetScale(scale)
+
+                -- Apply positioning if override is enabled
+                if petConfig.override then
+                    PetFrame:SetMovable(true)
+                    PetFrame:ClearAllPoints()
+                    local defaultX = petConfig.x or 200
+                    local defaultY = petConfig.y or -150
+                    local anchor = petConfig.anchor or 'TOPLEFT'
+                    local anchorParent = petConfig.anchorParent or 'TOPLEFT'
+                    PetFrame:SetPoint(anchor, UIParent, anchorParent, defaultX, defaultY)
+                    PetFrame:SetUserPlaced(true)
+                    PetFrame:SetMovable(false)
+                else
+                    -- Reset to default position relative to PlayerFrame
+                    PetFrame:ClearAllPoints()
+                    PetFrame:SetPoint('TOPLEFT', PlayerFrame, 'TOPLEFT', 100, -70)
+                end
+
+                -- FIXED: Llamar a ChangePetFrame para aplicar toda la configuración
+                unitframe.ChangePetFrame()
+
+                -- Update text with new text format settings
+                unitframe.UpdatePetFrameText()
+
+                -- Update power bar texture for current pet power type
+                if frame.UpdatePetManaBarTexture then
+                    frame.UpdatePetManaBarTexture()
+                end
+            end
+
+            -- FIXED: Also refresh all other frames on addon reload
+            unitframe:ApplySettings()
+
+            -- Force update of all text displays with new profile settings
+            unitframe.UpdateAllTextDisplays()
         end
     end
 end)
@@ -7182,45 +7497,42 @@ if PlayerFrame and TargetFrame then
     if FocusFrame then
         unitframe.ChangeFocusFrame()
         unitframe.ReApplyFocusFrame()
-        
+
         -- FIXED: Setup Focus ToT frame
         unitframe.ChangeFocusToT()
         if UnitExists('focustarget') then
             unitframe.ReApplyFocusToTFrame()
         end
     end
-    
+
     -- FIXED: Setup proper hover events for PlayerFrame text display
     unitframe.SetupPlayerFrameHoverEvents()
-    
+
     -- FIXED: Setup proper hover events for TargetFrame text display
     unitframe.SetupTargetFrameHoverEvents()
-    
+
     -- FIXED: Setup Target of Target frame
     unitframe.ChangeToT()
-    
+
     -- FIXED: Force initial texture application for ToT
     unitframe.StyleToTFrame()
-    
+
     -- FIXED: Apply initial ToT colors and textures
     if UnitExists('targettarget') then
         unitframe.ReApplyToTFrame()
     end
-    
+
     -- FIXED: Setup Focus of Target frame
     unitframe.ChangeFocusToT()
-    
+
     -- FIXED: Force initial texture application for FoT
     unitframe.StyleFocusToTFrame()
-    
+
     -- FIXED: Apply initial FoT colors and textures
     if UnitExists('focustarget') then
         unitframe.ReApplyFocusToTFrame()
     end
-    
- 
- 
-    
+
     -- party frames
     do
         local obj = {
@@ -7234,14 +7546,24 @@ if PlayerFrame and TargetFrame then
             orientation = addon:GetConfigValue("unitframe", "party", "orientation") or 'vertical'
         }
         -- Ensure party settings are initialized
-        if not localSettings.party then localSettings.party = {} end
+        if not localSettings.party then
+            localSettings.party = {}
+        end
         local objLocal = localSettings.party
         -- Set defaults if missing
-        if not objLocal.anchor then objLocal.anchor = addon.defaults.profile.unitframe.party.anchor end
-        if not objLocal.anchorParent then objLocal.anchorParent = addon.defaults.profile.unitframe.party.anchorParent end
-        if not objLocal.x then objLocal.x = addon.defaults.profile.unitframe.party.x end
-        if not objLocal.y then objLocal.y = addon.defaults.profile.unitframe.party.y end
-        
+        if not objLocal.anchor then
+            objLocal.anchor = addon.defaults.profile.unitframe.party.anchor
+        end
+        if not objLocal.anchorParent then
+            objLocal.anchorParent = addon.defaults.profile.unitframe.party.anchorParent
+        end
+        if not objLocal.x then
+            objLocal.x = addon.defaults.profile.unitframe.party.x
+        end
+        if not objLocal.y then
+            objLocal.y = addon.defaults.profile.unitframe.party.y
+        end
+
         -- Initialize party frames if they don't exist
         if not unitframe.PartyMoveFrame then
             -- Add safety check for party frames existence
@@ -7250,11 +7572,11 @@ if PlayerFrame and TargetFrame then
             else
             end
         end
-        
+
         if unitframe.PartyMoveFrame then
             unitframe:UpdatePartyState(obj)
             -- Party frames positioned
-            
+
             -- FIXED: Initialize mana coordinates for ALL party frames (not just visible ones)
             for i = 1, 4 do
                 local manabar = _G['PartyMemberFrame' .. i .. 'ManaBar']
@@ -7271,45 +7593,40 @@ function unitframe.HookManaBarColors()
     -- Hook the WoW function that updates mana bar types to ensure DragonflightUI colors persist
     hooksecurefunc("UnitFrameManaBar_UpdateType", function(manaBar)
         local name = manaBar:GetName()
-        
+
         if name == 'PlayerFrameManaBar' then
             -- FIXED: Handle PlayerFrameManaBar to prevent color resets on level up
             local powerType, powerTypeString = UnitPowerType('player')
-            
+
             if powerTypeString == 'MANA' then
                 PlayerFrameManaBar:GetStatusBarTexture():SetTexture(
-                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Mana'
-                )
+                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Mana')
             elseif powerTypeString == 'RAGE' then
                 PlayerFrameManaBar:GetStatusBarTexture():SetTexture(
-                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Rage'
-                )
+                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Rage')
             elseif powerTypeString == 'FOCUS' then
                 PlayerFrameManaBar:GetStatusBarTexture():SetTexture(
-                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Focus'
-                )
+                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Focus')
             elseif powerTypeString == 'ENERGY' then
                 PlayerFrameManaBar:GetStatusBarTexture():SetTexture(
-                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Energy'
-                )
+                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-Energy')
             elseif powerTypeString == 'RUNIC_POWER' then
                 PlayerFrameManaBar:GetStatusBarTexture():SetTexture(
-                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-RunicPower'
-                )
+                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Player-PortraitOn-Bar-RunicPower')
             end
-            
+
             -- Force white color to work with DragonUI textures
             PlayerFrameManaBar:SetStatusBarColor(1, 1, 1, 1)
-            
-         elseif name == 'TargetFrameManaBar' then
-        local currentValue = UnitPower("target")
-        if currentValue then
-            TargetFrameManaBar:SetValue(currentValue)
-        end
-            
+
+        elseif name == 'TargetFrameManaBar' then
+            local currentValue = UnitPower("target")
+            if currentValue then
+                TargetFrameManaBar:SetValue(currentValue)
+            end
+
         elseif name == 'FocusFrameManaBar' then
             local powerType, powerTypeString = UnitPowerType('focus')
-            
+
             if powerTypeString == 'MANA' then
                 FocusFrameManaBar:GetStatusBarTexture():SetTexture(
                     'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Mana')
@@ -7318,20 +7635,17 @@ function unitframe.HookManaBarColors()
                     'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Focus')
             elseif powerTypeString == 'RAGE' then
                 FocusFrameManaBar:GetStatusBarTexture():SetTexture(
-                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Rage'
-                )
+                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Rage')
             elseif powerTypeString == 'ENERGY' then
                 FocusFrameManaBar:GetStatusBarTexture():SetTexture(
-                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Energy'
-                )
+                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Energy')
             elseif powerTypeString == 'RUNIC_POWER' then
                 FocusFrameManaBar:GetStatusBarTexture():SetTexture(
-                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-RunicPower'
-                )
+                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-RunicPower')
             end
-            
+
             FocusFrameManaBar:SetStatusBarColor(1, 1, 1, 1)
-            
+
             -- Clear target flash for consistency
             if FocusFrameFlash then
                 FocusFrameFlash:SetTexture('')
@@ -7339,4 +7653,29 @@ function unitframe.HookManaBarColors()
         end
     end)
 end
+
+-- =============================================================================
+-- PROFILE CHANGE HOOK
+-- =============================================================================
+
+-- This function registers the necessary callbacks with AceDB-3.0.
+-- It tells the database to call our master refresh function whenever a profile event occurs.
+function unitframe.RegisterProfileCallbacks()
+    if addon and addon.db and addon.db.RegisterCallback then
+        -- When the profile is changed, copied, or reset, call addon:RefreshUnitFrames()
+        addon.db.RegisterCallback(addon, "OnProfileChanged", "RefreshUnitFrames")
+        addon.db.RegisterCallback(addon, "OnProfileCopied", "RefreshUnitFrames")
+        addon.db.RegisterCallback(addon, "OnProfileReset", "RefreshUnitFrames")
+    end
+end
+
+-- We use a dedicated frame to safely call the registration function once the addon is loaded.
+local profileCallbackFrame = CreateFrame("Frame")
+profileCallbackFrame:RegisterEvent("ADDON_LOADED")
+profileCallbackFrame:SetScript("OnEvent", function(self, event, addonName)
+    if addonName == "DragonUI" then
+        unitframe.RegisterProfileCallbacks()
+        self:UnregisterEvent("ADDON_LOADED") 
+    end
+end)
 

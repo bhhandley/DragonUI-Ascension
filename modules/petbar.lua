@@ -98,20 +98,22 @@ end
 
 -- Force pet bar initialization regardless of conditions
 local function ForcePetBarInitialization()
-	if config and config.additional then
-		-- Force anchor update
-		if anchor and anchor.petbar_update then
-			anchor:petbar_update()
-		end
-		-- Show the pet bar frame if it exists
-		if _G.pUiPetBar then
-			_G.pUiPetBar:Show()
-		end
-		-- Show anchor frame
-		if anchor then
-			anchor:Show()
-		end
-	end
+    if config and config.additional then
+        -- Force anchor update
+        if anchor and anchor.petbar_update then
+            anchor:petbar_update()
+        end
+        --[[ -- REMOVED to prevent ADDON_ACTION_BLOCKED errors
+        -- Show the pet bar frame if it exists
+        if _G.pUiPetBar then
+            _G.pUiPetBar:Show()
+        end
+        -- Show anchor frame
+        if anchor then
+            anchor:Show()
+        end
+        --]]
+    end
 end
 
 -- Delayed initialization to ensure everything is loaded
@@ -226,6 +228,7 @@ local function petbutton_updatestate(self, event)
 end
 
 local function petbutton_position()
+	if InCombatLockdown() then return end
 	-- Read config values dynamically
 	local btnsize = config.additional.size;
 	local space = config.additional.spacing;
@@ -308,6 +311,8 @@ end, 'PLAYER_ENTERING_WORLD');
 
 -- Refresh function for pet bar configuration changes
 function addon.RefreshPetbar()
+
+	if InCombatLockdown() then return end
 	if not pUiPetBar then return end
 	
 	-- Update button size and spacing
