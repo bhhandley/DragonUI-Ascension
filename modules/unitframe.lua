@@ -167,7 +167,22 @@ end
 * @return string|table - Formatted text string or table with different format options
 --]]
 local function FormatStatusText(current, maximum, textFormat, useBreakup, frameType)
-
+    if frameType then
+        local unit = frameType == "player" and "player" or 
+                    frameType == "target" and "target" or
+                    frameType == "focus" and "focus" or
+                    frameType == "pet" and "pet" or nil
+        
+        if unit then
+            if UnitIsDeadOrGhost(unit) or not UnitExists(unit) then
+                return ""
+            end
+            -- AÑADIR: Verificación adicional para unidades offline
+            if UnitIsConnected and not UnitIsConnected(unit) then
+                return ""
+            end
+        end
+    end
     -- If useBreakup is nil, try to auto-detect the frame type
     if useBreakup == nil then
         if addon and addon.db and addon.db.profile and addon.db.profile.unitframe then
@@ -1234,7 +1249,12 @@ function unitframe.UpdateTargetFrameText()
     end
 
     -- FIXED: Clear target frame texts if no target exists
-    if not UnitExists('target') then
+   if not UnitExists('target') or UnitIsDeadOrGhost('target') then
+        unitframe.ClearTargetFrameTexts()
+        return
+    end
+
+    if UnitIsPlayer('target') and UnitIsConnected and not UnitIsConnected('target') then
         unitframe.ClearTargetFrameTexts()
         return
     end
@@ -1381,6 +1401,43 @@ function unitframe.UpdateTargetFrameText()
     end
 end
 
+local function HandleUnitDeath(unit)
+    if unit == "target" then
+        unitframe.ClearTargetFrameTexts()
+    elseif unit == "focus" then
+        -- Limpiar textos del focus
+        local dragonFrame = _G["DragonUIUnitframeFrame"]
+        if dragonFrame then
+            if dragonFrame.FocusFrameHealthBarText then
+                dragonFrame.FocusFrameHealthBarText:Hide()
+            end
+            if dragonFrame.FocusFrameManaBarText then
+                dragonFrame.FocusFrameManaBarText:Hide()
+            end
+            if dragonFrame.FocusFrameHealthBarTextLeft then
+                dragonFrame.FocusFrameHealthBarTextLeft:Hide()
+            end
+            if dragonFrame.FocusFrameHealthBarTextRight then
+                dragonFrame.FocusFrameHealthBarTextRight:Hide()
+            end
+            if dragonFrame.FocusFrameManaBarTextLeft then
+                dragonFrame.FocusFrameManaBarTextLeft:Hide()
+            end
+            if dragonFrame.FocusFrameManaBarTextRight then
+                dragonFrame.FocusFrameManaBarTextRight:Hide()
+            end
+        end
+    elseif unit == "pet" then
+        unitframe.UpdatePetFrameText()
+    elseif string.match(unit or "", "^party[1-4]$") then
+        local partyIndex = tonumber(string.match(unit, 'party([1-4])'))
+        if partyIndex then
+            unitframe.UpdatePartyFrameText(partyIndex)
+        end
+    elseif unit == "player" then
+        unitframe.ClearPlayerFrameTexts()
+    end
+end
 -- FIXED: Setup proper hover events for PlayerFrame to ensure consistent text display behavior
 function unitframe.SetupPlayerFrameHoverEvents()
     if not PlayerFrame then
@@ -7024,15 +7081,23 @@ function eventFrame:OnEvent(event, arg1)
             unitframe.UpdatePartyFrameText(partyIndex)
             unitframe.UpdatePartyManaBar(partyIndex)
         end
-    elseif event == 'UNIT_HEALTH' and arg1 == 'focus' then
-        unitframe.UpdateFocusText()
-    elseif event == 'UNIT_HEALTH' and string.match(arg1, '^party[1-4]$') then
-        -- Update party frame text when health changes
-        local partyIndex = tonumber(string.match(arg1, 'party([1-4])'))
-        if partyIndex then
-            -- Ensure mouseover scripts are set up
-            unitframe.InitializePartyFrameMouseover()
-            unitframe.UpdatePartyFrameText(partyIndex)
+    elseif event == 'UNIT_HEALTH' and arg1 then
+        -- NUEVO: Verificar si la unidad murió PRIMERO
+        if UnitIsDeadOrGhost(arg1) then
+            HandleUnitDeath(arg1)
+        else
+            -- Código existente para unidades vivas
+            if arg1 == 'focus' then
+                unitframe.UpdateFocusText()
+            elseif string.match(arg1, '^party[1-4]$') then
+                -- Update party frame text when health changes
+                local partyIndex = tonumber(string.match(arg1, 'party([1-4])'))
+                if partyIndex then
+                    -- Ensure mouseover scripts are set up
+                    unitframe.InitializePartyFrameMouseover()
+                    unitframe.UpdatePartyFrameText(partyIndex)
+                end
+            end
         end
     elseif event == 'PLAYER_FOCUS_CHANGED' then
         unitframe.ReApplyFocusFrame()
@@ -7092,6 +7157,28 @@ function eventFrame:OnEvent(event, arg1)
         if PlayerFrame_UpdateStatus then
             PlayerFrame_UpdateStatus()
         end
+    -- NUEVOS EVENTOS PARA MANEJAR MUERTE/RESURRECCIÓN
+    elseif event == 'PLAYER_DEAD' then
+        HandleUnitDeath("player")
+    elseif event == 'PLAYER_ALIVE' or event == 'PLAYER_UNGHOST' then
+        -- Actualizar textos del player cuando revive
+        unitframe.SafeUpdatePlayerFrameText()
+    elseif event == 'UNIT_CONNECTION' and arg1 then
+        -- Manejar desconexiones de jugadores
+        if arg1 == "target" then
+            if UnitIsConnected and not UnitIsConnected(arg1) then
+                unitframe.ClearTargetFrameTexts()
+            else
+                unitframe.UpdateTargetFrameText()
+            end
+        elseif arg1 == "focus" then
+            unitframe.UpdateFocusText()
+        elseif string.match(arg1, "^party[1-4]$") then
+            local partyIndex = tonumber(string.match(arg1, 'party([1-4])'))
+            if partyIndex then
+                unitframe.UpdatePartyFrameText(partyIndex)
+            end
+        end
     end
 end
 eventFrame:SetScript('OnEvent', eventFrame.OnEvent)
@@ -7101,19 +7188,22 @@ eventFrame:SetScript('OnEvent', eventFrame.OnEvent)
 -- Register all events needed for unit frame updates
 ------------------------------------------
 -- Register core events for all unit frames
-eventFrame:RegisterEvent('UNIT_HEALTH')
-eventFrame:RegisterEvent('UNIT_MANA') -- FIXED: Add specific WoW 3.3.5a mana event
-eventFrame:RegisterEvent('UNIT_MAXMANA') -- FIXED: Add specific WoW 3.3.5a max mana event
+eventFrame:RegisterEvent('UNIT_HEALTH') 
+eventFrame:RegisterEvent('UNIT_MANA') 
+eventFrame:RegisterEvent('UNIT_MAXMANA') 
 eventFrame:RegisterEvent('UNIT_POWER_UPDATE')
 eventFrame:RegisterEvent('PLAYER_ENTERING_WORLD')
 eventFrame:RegisterEvent('PLAYER_TARGET_CHANGED')
 eventFrame:RegisterEvent('PLAYER_FOCUS_CHANGED')
-eventFrame:RegisterEvent('UNIT_ENTERED_VEHICLE')
-eventFrame:RegisterEvent('UNIT_EXITED_VEHICLE')
+eventFrame:RegisterEvent('UNIT_EXITED_VEHICLE') 
 eventFrame:RegisterEvent('ZONE_CHANGED')
-eventFrame:RegisterEvent('ZONE_CHANGED_INDOORS')
-eventFrame:RegisterEvent('ZONE_CHANGED_NEW_AREA')
-eventFrame:RegisterEvent('PLAYER_UPDATE_RESTING')
+eventFrame:RegisterEvent('ZONE_CHANGED_INDOORS') 
+eventFrame:RegisterEvent('ZONE_CHANGED_NEW_AREA') 
+eventFrame:RegisterEvent('PLAYER_UPDATE_RESTING') 
+eventFrame:RegisterEvent('PLAYER_DEAD')
+eventFrame:RegisterEvent('PLAYER_ALIVE')
+eventFrame:RegisterEvent('PLAYER_UNGHOST')
+eventFrame:RegisterEvent('UNIT_CONNECTION')
 
 -- Module initialization compatible with DragonUI
 local frameInit = CreateFrame("Frame")
