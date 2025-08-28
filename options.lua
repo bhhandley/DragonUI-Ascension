@@ -1196,6 +1196,68 @@ function addon:CreateOptionsTable()
                         set = createSetFunction("map", "zoom_in_out", nil, "RefreshMinimap"),
                         order = 10
                     },
+
+                    -- AURAS POSITION
+                    auras_header = {
+                        type = 'header',
+                        name = "Minimap Auras Position",
+                        order = 10.1
+                    },
+                    auras_x_offset = {
+                        type = 'range',
+                        name = "Auras Horizontal Offset",
+                        desc = "Adjusts the horizontal position of the buffs/debuffs block next to the minimap.",
+                        min = -200, -- More space to the left
+                        max = -10,  -- Closer to the minimap
+                        step = 1,
+                        get = function()
+                            -- Ensure the 'auras' table exists to prevent errors
+                            if not addon.db.profile.map.auras then
+                                addon.db.profile.map.auras = { x_offset = -80 } -- Fallback default
+                            end
+                            return addon.db.profile.map.auras.x_offset
+                        end,
+                        set = createInstantSetFunction("map", "auras", "x_offset", "RefreshAuraPosition"),
+                        order = 10.2
+                    },
+                    auras_y_offset = {
+                        type = 'range',
+                        name = "Auras Vertical Offset",
+                        desc = "Adjusts the vertical position of the buffs/debuffs block next to the minimap.",
+                        min = -100, -- More down
+                        max = 100,  -- More up
+                        step = 1,
+                        get = function()
+                            -- Ensure the 'auras' table exists to prevent errors
+                            if not addon.db.profile.map.auras then
+                                addon.db.profile.map.auras = { y_offset = 0 } -- Fallback default
+                            end
+                            return addon.db.profile.map.auras.y_offset
+                        end,
+                        set = createInstantSetFunction("map", "auras", "y_offset", "RefreshAuraPosition"),
+                        order = 10.3
+                    },
+
+                    auras_reset = {
+                        type = 'execute',
+                        name = "Reset Auras Position",
+                        desc = "Reset auras position to default values (-80, 0)",
+                        func = function()
+                            -- Ensure the 'auras' table exists
+                            if not addon.db.profile.map.auras then
+                                addon.db.profile.map.auras = {}
+                            end
+                            -- Reset to defaults
+                            addon.db.profile.map.auras.x_offset = -70
+                            addon.db.profile.map.auras.y_offset = 23
+                            -- Refresh the position
+                            if addon.RefreshAuraPosition then
+                                addon.RefreshAuraPosition()
+                            end
+                        end,
+                        order = 10.4
+                    },
+
                     -- MAIL ICON POSITION
                     mail_header = {
                         type = 'header',

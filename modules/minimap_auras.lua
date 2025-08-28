@@ -16,15 +16,32 @@ local hooksecurefunc = hooksecurefunc;
 
 local AuraFrameMixin = {};
 
-TempEnchant1:ClearAllPoints()
-TempEnchant1:SetPoint('TOPRIGHT', Minimap, 'TOPLEFT', -80, 24)
+-- Function to refresh the position of auras based on database settings
+function addon:RefreshAuraPosition()
+    if not TempEnchant1 then return end
 
-TempEnchant2:ClearAllPoints()
-TempEnchant2:SetPoint('TOPRIGHT', TempEnchant1, 'TOPLEFT', -5, 0)
+    -- Read horizontal and vertical offsets from the database
+    local x_offset = (addon.db.profile.map.auras and addon.db.profile.map.auras.x_offset) or -80
+    local y_offset = (addon.db.profile.map.auras and addon.db.profile.map.auras.y_offset) or 24
 
-ConsolidatedBuffs:ClearAllPoints()
-ConsolidatedBuffs:SetPoint('TOPRIGHT', TempEnchant1)
+    -- Reposition the main enchant frame
+    TempEnchant1:ClearAllPoints()
+    TempEnchant1:SetPoint('TOPRIGHT', Minimap, 'TOPLEFT', x_offset, y_offset)
 
+    -- Reposition secondary enchant and consolidated buffs frames
+    TempEnchant2:ClearAllPoints()
+    TempEnchant2:SetPoint('TOPRIGHT', TempEnchant1, 'TOPLEFT', -5, 0)
+    ConsolidatedBuffs:ClearAllPoints()
+    ConsolidatedBuffs:SetPoint('TOPRIGHT', TempEnchant1)
+
+    -- Force update of all buff and debuff anchors to reflect new positions
+    BuffFrame_UpdateAllBuffAnchors()
+    if DebuffButton_UpdateAnchors then
+        DebuffButton_UpdateAnchors("DebuffButton", 1)
+    end
+end
+
+-- Function to position the first buff button, considering vehicle UI and existing enchants
 function AuraFrameMixin:UpdateFirstButton(button)
 	if button and button:IsShown() then
 		button:ClearAllPoints()
@@ -43,6 +60,7 @@ function AuraFrameMixin:UpdateFirstButton(button)
 	end
 end
 
+-- Function to update the anchors of all buff buttons in a grid layout
 function AuraFrameMixin:UpdateBuffsAnchor()
 	local previousBuff, aboveBuff
 	local numBuffs = 0
@@ -72,6 +90,7 @@ function AuraFrameMixin:UpdateBuffsAnchor()
 	end
 end
 
+-- Function to update the anchor of a specific debuff button
 function AuraFrameMixin:UpdateDeBuffsAnchor(index)
 	local numBuffs = BUFF_ACTUAL_DISPLAY + BuffFrame.numEnchants
 	local numRows = ceil(numBuffs/BUFFS_PER_ROW)
@@ -93,6 +112,7 @@ function AuraFrameMixin:UpdateDeBuffsAnchor(index)
 	end
 end
 
+-- Function to create and configure the collapse/expand button for auras
 function AuraFrameMixin:UpdateCollapseAndExpandButtonAnchor()
 	local arrow = CreateFrame('Button', 'CollapseAndExpandButton', _G.MinimapCluster)
 	arrow:SetSize(13, 26)
@@ -135,11 +155,39 @@ function AuraFrameMixin:UpdateCollapseAndExpandButtonAnchor()
 end
 AuraFrameMixin:UpdateCollapseAndExpandButtonAnchor();
 
+-- Function to show/hide the collapse button based on number of buffs
 function AuraFrameMixin:RefreshCollapseExpandButtonState(numBuffs)
-	shown(self.arrow, numBuffs > 0);
+    shown(self.arrow, numBuffs > 0);
 end
 
-hooksecurefunc('BuffFrame_UpdateAllBuffAnchors', AuraFrameMixin.UpdateBuffsAnchor)
-hooksecurefunc('DebuffButton_UpdateAnchors', AuraFrameMixin.UpdateDeBuffsAnchor)
+-- Replace Blizzard's buff update functions with our custom ones for full control
+BuffFrame_UpdateAllBuffAnchors = AuraFrameMixin.UpdateBuffsAnchor
+DebuffButton_UpdateAnchors = AuraFrameMixin.UpdateDeBuffsAnchor
 
 mixin(addon._map, AuraFrameMixin);
+
+-- [[ REFRESH LOGIC BASED ON UNITFRAME.LUA ]]
+
+-- 1. Call the function once on load to set initial position.
+addon:RefreshAuraPosition()
+
+-- 2. Register the refresh function directly with AceDB database.
+--    This is the correct method and ensures it executes when profile changes.
+local function RegisterProfileCallbacks()
+    if addon and addon.db and addon.db.RegisterCallback then
+        -- When profile changes, is copied, or reset, call RefreshAuraPosition.
+        addon.db:RegisterCallback("OnProfileChanged", addon.RefreshAuraPosition)
+        addon.db:RegisterCallback("OnProfileCopied", addon.RefreshAuraPosition)
+        addon.db:RegisterCallback("OnProfileReset", addon.RefreshAuraPosition)
+    end
+end
+
+-- 3. Use a frame to register the callback safely when the addon has loaded.
+local callbackFrame = CreateFrame("Frame")
+callbackFrame:RegisterEvent("ADDON_LOADED")
+callbackFrame:SetScript("OnEvent", function(self, event, addonName)
+    if addonName == "DragonUI" then
+        RegisterProfileCallbacks()
+        self:UnregisterEvent("ADDON_LOADED")
+    end
+end)
