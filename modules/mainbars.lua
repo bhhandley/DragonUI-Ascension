@@ -32,6 +32,46 @@ pUiMainBarArt:SetFrameStrata('HIGH');
 pUiMainBarArt:SetFrameLevel(pUiMainBar:GetFrameLevel() + 4);
 pUiMainBarArt:SetAllPoints(pUiMainBar);
 
+-- [MEJORA] Nueva función de ayuda para gestionar el estilo de los grifos
+local function UpdateGryphonStyle()
+    -- Usamos addon.db.profile para que siempre lea la configuración más actual
+    local db_style = addon.db and addon.db.profile and addon.db.profile.style
+    if not db_style then db_style = config.style end -- Fallback a la config inicial si la DB no está lista
+
+    local faction = UnitFactionGroup('player')
+
+    if db_style.gryphons == 'old' then
+        MainMenuBarLeftEndCap:SetClearPoint('BOTTOMLEFT', -85, -22)
+        MainMenuBarRightEndCap:SetClearPoint('BOTTOMRIGHT', 84, -22)
+        MainMenuBarLeftEndCap:set_atlas('ui-hud-actionbar-gryphon-left', true)
+        MainMenuBarRightEndCap:set_atlas('ui-hud-actionbar-gryphon-right', true)
+        MainMenuBarLeftEndCap:Show()
+        MainMenuBarRightEndCap:Show()
+    elseif db_style.gryphons == 'new' then
+        MainMenuBarLeftEndCap:SetClearPoint('BOTTOMLEFT', -95, -23)
+        MainMenuBarRightEndCap:SetClearPoint('BOTTOMRIGHT', 95, -23)
+        if faction == 'Alliance' then
+            MainMenuBarLeftEndCap:set_atlas('ui-hud-actionbar-gryphon-thick-left', true)
+            MainMenuBarRightEndCap:set_atlas('ui-hud-actionbar-gryphon-thick-right', true)
+        else
+            MainMenuBarLeftEndCap:set_atlas('ui-hud-actionbar-wyvern-thick-left', true)
+            MainMenuBarRightEndCap:set_atlas('ui-hud-actionbar-wyvern-thick-right', true)
+        end
+        MainMenuBarLeftEndCap:Show()
+        MainMenuBarRightEndCap:Show()
+    elseif db_style.gryphons == 'flying' then
+        MainMenuBarLeftEndCap:SetClearPoint('BOTTOMLEFT', -80, -21)
+        MainMenuBarRightEndCap:SetClearPoint('BOTTOMRIGHT', 80, -21)
+        MainMenuBarLeftEndCap:set_atlas('ui-hud-actionbar-gryphon-flying-left', true)
+        MainMenuBarRightEndCap:set_atlas('ui-hud-actionbar-gryphon-flying-right', true)
+        MainMenuBarLeftEndCap:Show()
+        MainMenuBarRightEndCap:Show()
+    else
+        MainMenuBarLeftEndCap:Hide()
+        MainMenuBarRightEndCap:Hide()
+    end
+end
+
 function MainMenuBarMixin:actionbutton_setup()
 	for _,obj in ipairs({MainMenuBar:GetChildren(),MainMenuBarArtFrame:GetChildren()}) do
 		obj:SetParent(pUiMainBar)
@@ -63,38 +103,87 @@ function MainMenuBarMixin:actionbutton_setup()
 end
 
 function MainMenuBarMixin:actionbar_art_setup()
-	-- art
-	MainMenuBarArtFrame:SetParent(pUiMainBar)
-	for _,art in pairs({MainMenuBarLeftEndCap, MainMenuBarRightEndCap}) do
-		art:SetParent(pUiMainBarArt)
-		art:SetDrawLayer('ARTWORK')
-	end
-	
-	if config.style.gryphons == 'old' then
-		MainMenuBarLeftEndCap:SetClearPoint('BOTTOMLEFT', -85, -22)
-		MainMenuBarRightEndCap:SetClearPoint('BOTTOMRIGHT', 84, -22)
-		MainMenuBarLeftEndCap:set_atlas('ui-hud-actionbar-gryphon-left', true)
-		MainMenuBarRightEndCap:set_atlas('ui-hud-actionbar-gryphon-right', true)
-	elseif config.style.gryphons == 'new' then
-		MainMenuBarLeftEndCap:SetClearPoint('BOTTOMLEFT', -95, -23)
-		MainMenuBarRightEndCap:SetClearPoint('BOTTOMRIGHT', 95, -23)
-		if faction == 'Alliance' then
-			MainMenuBarLeftEndCap:set_atlas('ui-hud-actionbar-gryphon-thick-left', true)
-			MainMenuBarRightEndCap:set_atlas('ui-hud-actionbar-gryphon-thick-right', true)
-		else
-			MainMenuBarLeftEndCap:set_atlas('ui-hud-actionbar-wyvern-thick-left', true)
-			MainMenuBarRightEndCap:set_atlas('ui-hud-actionbar-wyvern-thick-right', true)
-		end
-	elseif config.style.gryphons == 'flying' then
-		MainMenuBarLeftEndCap:SetClearPoint('BOTTOMLEFT', -80, -21)
-		MainMenuBarRightEndCap:SetClearPoint('BOTTOMRIGHT', 80, -21)
-		MainMenuBarLeftEndCap:set_atlas('ui-hud-actionbar-gryphon-flying-left', true)
-		MainMenuBarRightEndCap:set_atlas('ui-hud-actionbar-gryphon-flying-right', true)
-	else
-		MainMenuBarLeftEndCap:Hide()
-		MainMenuBarRightEndCap:Hide()
-	end
+    -- art
+    MainMenuBarArtFrame:SetParent(pUiMainBar)
+    for _,art in pairs({MainMenuBarLeftEndCap, MainMenuBarRightEndCap}) do
+        art:SetParent(pUiMainBarArt)
+        art:SetDrawLayer('ARTWORK')
+    end
+    
+    -- Apply background visibility (call the new function)
+    self:update_main_bar_background()
+    
+    -- [MEJORA] Llamamos a la nueva función en lugar de tener el código aquí
+    UpdateGryphonStyle()
 end
+
+function MainMenuBarMixin:update_main_bar_background()
+    local alpha = (addon.db and addon.db.profile and addon.db.profile.buttons and addon.db.profile.buttons.hide_main_bar_background) and 0 or 1
+    
+    -- TU CÓDIGO ACTUAL QUE FUNCIONA (fondos de botones)
+    for i = 1, NUM_ACTIONBAR_BUTTONS do
+        local button = _G["ActionButton" .. i]
+        if button then
+            if button.NormalTexture then button.NormalTexture:SetAlpha(alpha) end
+            for j = 1, button:GetNumRegions() do
+                local region = select(j, button:GetRegions())
+                if region and region:GetObjectType() == "Texture" and region:GetDrawLayer() == "BACKGROUND" and region ~= button:GetNormalTexture() then
+                    region:SetAlpha(alpha)
+                end
+            end
+        end
+    end
+    
+    
+    if pUiMainBar then
+        -- 1. Oculta las texturas sueltas dentro de pUiMainBar
+        for i = 1, pUiMainBar:GetNumRegions() do
+            local region = select(i, pUiMainBar:GetRegions())
+            if region and region:GetObjectType() == "Texture" then
+                local texPath = region:GetTexture()
+                if texPath and not string.find(texPath, "ICON") then
+                    region:SetAlpha(alpha)
+                end
+            end
+        end
+
+        -- 2. Oculta las texturas de los frames hijos, PERO con más protecciones
+        for i = 1, pUiMainBar:GetNumChildren() do
+            local child = select(i, pUiMainBar:GetChildren())
+            local name = child and child:GetName()
+            
+            -- PROTECCIONES COMPLETAS: Añadimos todos los elementos del micromenú
+            if child and name ~= "pUiMainBarArt" 
+                    and not string.find(name or "", "ActionButton")
+                    and name ~= "MainMenuExpBar" 
+                    and name ~= "ReputationWatchBar"
+                    and name ~= "MultiBarBottomLeft"
+                    and name ~= "MultiBarBottomRight"
+                    and name ~= "MicroButtonAndBagsBar"
+                    and not string.find(name or "", "MicroButton")  -- Protege todos los botones del micromenú
+                    and not string.find(name or "", "Bag")          -- Protege las bolsas
+                    and name ~= "CharacterMicroButton"
+                    and name ~= "SpellbookMicroButton"
+                    and name ~= "TalentMicroButton"
+                    and name ~= "AchievementMicroButton"
+                    and name ~= "QuestLogMicroButton"
+                    and name ~= "SocialsMicroButton"
+                    and name ~= "PVPMicroButton"
+                    and name ~= "LFGMicroButton"
+                    and name ~= "MainMenuMicroButton"
+                    and name ~= "HelpMicroButton" then
+                
+                for j = 1, child:GetNumRegions() do
+                    local region = select(j, child:GetRegions())
+                    if region and region:GetObjectType() == "Texture" then
+                        region:SetAlpha(alpha)
+                    end
+                end
+            end
+        end
+    end
+end
+
 
 function MainMenuBarMixin:actionbar_setup()
 	ActionButton1:SetParent(pUiMainBar)
@@ -208,12 +297,7 @@ end,
 	'UPDATE_EXHAUSTION'
 );
 
--- Values will be read dynamically from config
--- local both = config.xprepbar.bothbar_offset;
--- local single = config.xprepbar.singlebar_offset;
--- local nobar	= config.xprepbar.nobar_offset;
--- local abovexp = config.xprepbar.repbar_abovexp_offset;
--- local default = config.xprepbar.repbar_offset;
+
 
 hooksecurefunc('ReputationWatchBar_Update',function()
 	local name = GetWatchedFactionInfo();
@@ -236,6 +320,8 @@ function pUiMainBar:actionbar_update()
 	local both = db_xprepbar.bothbar_offset;
 	local single = db_xprepbar.singlebar_offset;
 	local nobar	= db_xprepbar.nobar_offset;
+
+	
 	
 	local xpbar = MainMenuExpBar:IsShown();
 	local repbar = ReputationWatchBar:IsShown();
@@ -295,6 +381,27 @@ function addon.RefreshRepBarPosition()
 	end
 end
 
+-- [NUEVO] Función para actualizar dinámicamente la posición de las barras superiores
+function addon.RefreshUpperActionBarsPosition()
+    if not MultiBarBottomLeftButton1 or not MultiBarBottomRight then return end
+
+    -- Decide el desplazamiento vertical basado en la configuración
+    local yOffset1, yOffset2
+    if addon.db and addon.db.profile.buttons.hide_main_bar_background then
+        -- Valores cuando el fondo está OCULTO (barras más cerca)
+        yOffset1 = 45 -- Originalmente 48
+        yOffset2 = 8  -- Originalmente 8
+    else
+        -- Valores por defecto cuando el fondo está VISIBLE
+        yOffset1 = 48
+        yOffset2 = 8
+    end
+
+    -- Vuelve a anclar las barras con el nuevo desplazamiento
+    MultiBarBottomLeftButton1:SetClearPoint('BOTTOMLEFT', ActionButton1, 'BOTTOMLEFT', 0, yOffset1)
+    MultiBarBottomRight:SetClearPoint('BOTTOMLEFT', MultiBarBottomLeftButton1, 'TOPLEFT', 0, yOffset2)
+end
+
 function MainMenuBarMixin:initialize()
 	self:actionbutton_setup();
 	self:actionbar_setup();
@@ -306,69 +413,46 @@ MainMenuBarMixin:initialize();
 
 -- Refresh function for configuration changes
 function addon.RefreshMainbars()
-	if not pUiMainBar then return end
-	
-	local db_mainbars = addon.db.profile.mainbars
-	local db_style = addon.db.profile.style
-	local db_buttons = addon.db.profile.buttons
-	
-	-- Update scales
-	pUiMainBar:SetScale(db_mainbars.scale_actionbar);
-	if MultiBarLeft then MultiBarLeft:SetScale(db_mainbars.scale_leftbar); end
-	if MultiBarRight then MultiBarRight:SetScale(db_mainbars.scale_rightbar); end
-	if VehicleMenuBar then VehicleMenuBar:SetScale(db_mainbars.scale_vehicle); end
-	
-	-- Update Page Buttons visibility
-	if db_buttons.pages.show then
-		ActionBarUpButton:Show()
-		ActionBarDownButton:Show()
-		MainMenuBarPageNumber:Show()
-	else
-		ActionBarUpButton:Hide()
-		ActionBarDownButton:Hide()
-		MainMenuBarPageNumber:Hide()
-	end
+    if not pUiMainBar then return end
+    
+    local db_mainbars = addon.db.profile.mainbars
+    local db_style = addon.db.profile.style
+    local db_buttons = addon.db.profile.buttons
+    
+    -- Update scales
+    pUiMainBar:SetScale(db_mainbars.scale_actionbar);
+    if MultiBarLeft then MultiBarLeft:SetScale(db_mainbars.scale_leftbar); end
+    if MultiBarRight then MultiBarRight:SetScale(db_mainbars.scale_rightbar); end
+    if VehicleMenuBar then VehicleMenuBar:SetScale(db_mainbars.scale_vehicle); end
+    
+    -- Update Page Buttons visibility
+    if db_buttons.pages.show then
+        ActionBarUpButton:Show()
+        ActionBarDownButton:Show()
+        MainMenuBarPageNumber:Show()
+    else
+        ActionBarUpButton:Hide()
+        ActionBarDownButton:Hide()
+        MainMenuBarPageNumber:Hide()
+    end
 
-	-- Update XP bar style
-	local old = (db_style.xpbar == 'old');
-	local new = (db_style.xpbar == 'new');
-	if old then
-		if MainMenuExpBar then MainMenuExpBar:SetStatusBarTexture("Interface\\MainMenuBar\\UI-XP-Bar"); end
-		if ReputationWatchStatusBar then ReputationWatchStatusBar:SetStatusBarTexture("Interface\\MainMenuBar\\UI-XP-Bar"); end
-	elseif new then
-		if MainMenuExpBar then MainMenuExpBar:SetStatusBarTexture("Interface\\MainMenuBar\\UI-ExperienceBar"); end
-		if ReputationWatchStatusBar then ReputationWatchStatusBar:SetStatusBarTexture("Interface\\MainMenuBar\\UI-ExperienceBar"); end
-	end
-	
-	-- Update gryphon style
-	if db_style.gryphons == 'old' then
-		MainMenuBarLeftEndCap:SetClearPoint('BOTTOMLEFT', -85, -22)
-		MainMenuBarRightEndCap:SetClearPoint('BOTTOMRIGHT', 84, -22)
-		MainMenuBarLeftEndCap:set_atlas('ui-hud-actionbar-gryphon-left', true)
-		MainMenuBarRightEndCap:set_atlas('ui-hud-actionbar-gryphon-right', true)
-		MainMenuBarLeftEndCap:Show()
-		MainMenuBarRightEndCap:Show()
-	elseif db_style.gryphons == 'new' then
-		MainMenuBarLeftEndCap:SetClearPoint('BOTTOMLEFT', -95, -23)
-		MainMenuBarRightEndCap:SetClearPoint('BOTTOMRIGHT', 95, -23)
-		if faction == 'Alliance' then
-			MainMenuBarLeftEndCap:set_atlas('ui-hud-actionbar-gryphon-thick-left', true)
-			MainMenuBarRightEndCap:set_atlas('ui-hud-actionbar-gryphon-thick-right', true)
-		else
-			MainMenuBarLeftEndCap:set_atlas('ui-hud-actionbar-wyvern-thick-left', true)
-			MainMenuBarRightEndCap:set_atlas('ui-hud-actionbar-wyvern-thick-right', true)
-		end
-		MainMenuBarLeftEndCap:Show()
-		MainMenuBarRightEndCap:Show()
-	elseif db_style.gryphons == 'flying' then
-		MainMenuBarLeftEndCap:SetClearPoint('BOTTOMLEFT', -80, -21)
-		MainMenuBarRightEndCap:SetClearPoint('BOTTOMRIGHT', 80, -21)
-		MainMenuBarLeftEndCap:set_atlas('ui-hud-actionbar-gryphon-flying-left', true)
-		MainMenuBarRightEndCap:set_atlas('ui-hud-actionbar-gryphon-flying-right', true)
-		MainMenuBarLeftEndCap:Show()
-		MainMenuBarRightEndCap:Show()
-	else
-		MainMenuBarLeftEndCap:Hide()
-		MainMenuBarRightEndCap:Hide()
-	end
+    -- Update main bar background visibility (call the new function)
+    MainMenuBarMixin:update_main_bar_background()
+
+	-- [NUEVO] Llama a la función de reposicionamiento de las barras superiores
+    addon.RefreshUpperActionBarsPosition()
+
+    -- Update XP bar style
+    local old = (db_style.xpbar == 'old');
+    local new = (db_style.xpbar == 'new');
+    if old then
+        if MainMenuExpBar then MainMenuExpBar:SetStatusBarTexture("Interface\\MainMenuBar\\UI-XP-Bar"); end
+        if ReputationWatchStatusBar then ReputationWatchStatusBar:SetStatusBarTexture("Interface\\MainMenuBar\\UI-XP-Bar"); end
+    elseif new then
+        if MainMenuExpBar then MainMenuExpBar:SetStatusBarTexture("Interface\\MainMenuBar\\UI-ExperienceBar"); end
+        if ReputationWatchStatusBar then ReputationWatchStatusBar:SetStatusBarTexture("Interface\\MainMenuBar\\UI-ExperienceBar"); end
+    end
+    
+    -- [MEJORA] Llamamos a la nueva función en lugar de repetir todo el código
+    UpdateGryphonStyle()
 end

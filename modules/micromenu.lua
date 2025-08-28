@@ -1026,157 +1026,121 @@ local function setupMicroButtons(xOffset)
         elseif isPVPButton then
             -- Special handling for PVP button with faction-based micropvp texture
             SetupPVPButton(button)
-        elseif isCharacterButton then
-			-- Special handling for Character button with portrait
-			local microTexture = 'Interface\\AddOns\\DragonUI\\Textures\\Micromenu\\uimicromenu2x'
-			local dx, dy = -1, 1
-			local offX, offY = button:GetPushedTextOffset()
-			local sizeX, sizeY = button:GetSize()
+         elseif isCharacterButton then
+            -- Special handling for Character button with portrait
+            local microTexture = 'Interface\\AddOns\\DragonUI\\Textures\\Micromenu\\uimicromenu2x'
+            local dx, dy = -1, 1
+            local offX, offY = button:GetPushedTextOffset()
+            local sizeX, sizeY = button:GetSize()
+            
+            -- Create portrait texture (ARTWORK layer, above background)
+            if not button.DragonUIPortrait then
+                button.DragonUIPortrait = button:CreateTexture('DragonUIPortrait', 'ARTWORK')
+            end
+            local portrait = button.DragonUIPortrait
+            local portraitSize = 22
+            portrait:SetSize(portraitSize, portraitSize)
+            portrait:SetPoint('CENTER', 0.5, -0.5)
+            SetPortraitTexture(portrait, 'player')
+            
+            -- CUSTOM HIGHLIGHT: Create circular highlight overlay
+            if not button.DragonUIPortraitHighlight then
+                button.DragonUIPortraitHighlight = button:CreateTexture('DragonUIPortraitHighlight', 'OVERLAY')
+            end
+            local highlightOverlay = button.DragonUIPortraitHighlight
+            highlightOverlay:SetSize(portraitSize, portraitSize)
+            highlightOverlay:SetPoint('CENTER', 0.5, -0.5)
+            SetPortraitTexture(highlightOverlay, 'player')
+            highlightOverlay:SetVertexColor(1.5, 1.5, 1.5, 0.4)
+            highlightOverlay:SetBlendMode('ADD')
+            highlightOverlay:Hide()
+            
+            -- Setup mouseover events for custom highlight
+            local originalOnEnter = button:GetScript('OnEnter')
+            local originalOnLeave = button:GetScript('OnLeave')
+            
+            button:SetScript('OnEnter', function(self)
+                if originalOnEnter then originalOnEnter(self) end
+                if self.DragonUIPortraitHighlight then
+                    self.DragonUIPortraitHighlight:Show()
+                end
+            end)
+            
+            button:SetScript('OnLeave', function(self)
+                if originalOnLeave then originalOnLeave(self) end
+                if self.DragonUIPortraitHighlight then
+                    self.DragonUIPortraitHighlight:Hide()
+                end
+            end)
+            
+            -- Add background for Character button (ONLY CREATE ONCE)
+            if not button.DragonUIBackground then
+                -- Background Normal
+                local bg = button:CreateTexture('DragonUIBackground', 'BACKGROUND')
+                bg:SetTexture(microTexture)
+                bg:SetSize(sizeX, sizeY + 1)
+                bg:SetTexCoord(0.0654297, 0.12793, 0.330078, 0.490234)
+                bg:SetPoint('CENTER', dx, dy)
+                button.DragonUIBackground = bg
+                
+                -- Background Pressed
+                local bgPushed = button:CreateTexture('DragonUIBackgroundPushed', 'BACKGROUND')
+                bgPushed:SetTexture(microTexture)
+                bgPushed:SetSize(sizeX, sizeY + 1)
+                bgPushed:SetTexCoord(0.0654297, 0.12793, 0.494141, 0.654297)
+                bgPushed:SetPoint('CENTER', dx + offX, dy + offY)
+                bgPushed:Hide()
+                button.DragonUIBackgroundPushed = bgPushed
+                
+                -- State management
+                button.dragonUIState = { pushed = false }
+                
+                button.HandleDragonUIState = function()
+                    local state = button.dragonUIState
+                    if state.pushed then
+                        local subtleOffX, subtleOffY = offX * 0.3, offY * 0.3
+                        portrait:SetPoint('CENTER', 0.5 + subtleOffX, -0.5 + subtleOffY)
+                        portrait:SetAlpha(0.7)
+                        highlightOverlay:SetPoint('CENTER', 0.5 + subtleOffX, -0.5 + subtleOffY)
+                        bg:Hide()
+                        bgPushed:Show()
+                    else
+                        portrait:SetPoint('CENTER', 0.5, -0.5)
+                        portrait:SetAlpha(1.0)
+                        highlightOverlay:SetPoint('CENTER', 0.5, -0.5)
+                        bg:Show()
+                        bgPushed:Hide()
+                    end
+                end
+                
+                -- Register events and scripts
+                button:RegisterEvent('UNIT_PORTRAIT_UPDATE')
+                button:SetScript('OnEvent', function(self, event, unit)
+                    if event == 'UNIT_PORTRAIT_UPDATE' and unit == 'player' then
+                        SetPortraitTexture(self.DragonUIPortrait, 'player')
+                        SetPortraitTexture(self.DragonUIPortraitHighlight, 'player')
+                    end
+                end)
+                
+                button.dragonUITimer = 0
+                button.dragonUILastState = false
+                button:SetScript('OnUpdate', function(self, elapsed)
+                    self.dragonUITimer = self.dragonUITimer + elapsed
+                    if self.dragonUITimer >= 0.1 then
+                        self.dragonUITimer = 0
+                        local currentState = self:GetButtonState() == "PUSHED"
+                        if currentState ~= self.dragonUILastState then
+                            self.dragonUILastState = currentState
+                            self.dragonUIState.pushed = currentState
+                            self.HandleDragonUIState()
+                        end
+                    end
+                end)
+                
+                button.HandleDragonUIState()
+            end
 			
--- Background Normal (uses DOWN coords, fixed position) - like ultimaversion
-local bg = button:CreateTexture('DragonUIBackground', 'BACKGROUND')
-bg:SetTexture(microTexture)
-bg:SetSize(sizeX, sizeY + 1)
-bg:SetTexCoord(0.0654297, 0.12793, 0.330078, 0.490234)  -- ButtonBG-Down (CORRECTED)
-bg:SetPoint('CENTER', dx, dy)
-button.DragonUIBackground = bg
-
--- Background Pressed (uses UP coords, offset position) - like ultimaversion
-local bgPushed = button:CreateTexture('DragonUIBackgroundPushed', 'BACKGROUND')
-bgPushed:SetTexture(microTexture)
-bgPushed:SetSize(sizeX, sizeY + 1)
-bgPushed:SetTexCoord(0.0654297, 0.12793, 0.494141, 0.654297)  -- ButtonBG-Up (CORRECTED)
-bgPushed:SetPoint('CENTER', dx + offX, dy + offY)
-bgPushed:Hide()
-button.DragonUIBackgroundPushed = bgPushed
 			
-			-- Create portrait texture (ARTWORK layer, above background)
-			local portrait = button:CreateTexture('DragonUIPortrait', 'ARTWORK')
-			-- Make portrait smaller and maintain aspect ratio (more square-like)
-			local portraitSize = 22  -- Slightly bigger and more proportional
-			portrait:SetSize(portraitSize, portraitSize)
-			-- FIXED: Fine-tune portrait centering (testing different offsets)
-			portrait:SetPoint('CENTER', 0.5, -0.5)  -- Perfect centering: 0.5px right, 0.5px up
-			button.DragonUIPortrait = portrait
-			
-			-- Apply player portrait (automatically circular in WOTLK 3.3.5a)
-			SetPortraitTexture(portrait, 'player')
-			
-			-- CUSTOM HIGHLIGHT: Create circular highlight overlay for Character button
-			local highlightOverlay = button:CreateTexture('DragonUIPortraitHighlight', 'OVERLAY')
-			highlightOverlay:SetSize(portraitSize, portraitSize)
-			highlightOverlay:SetPoint('CENTER', 0.5, -0.5)  -- Same position as portrait
-			-- Use a circular portrait texture with white tint for circular highlight
-			SetPortraitTexture(highlightOverlay, 'player')  -- Same circular shape as portrait
-			highlightOverlay:SetVertexColor(1.5, 1.5, 1.5, 0.4)  -- Bright white tint with transparency
-			highlightOverlay:SetBlendMode('ADD')  -- Additive blending for glow effect
-			highlightOverlay:Hide()  -- Hidden by default
-			button.DragonUIPortraitHighlight = highlightOverlay
-			
-			-- Setup mouseover events for custom highlight (preserve original tooltip functionality)
-			local originalOnEnter = button:GetScript('OnEnter')
-			local originalOnLeave = button:GetScript('OnLeave')
-			
-			button:SetScript('OnEnter', function(self)
-				-- Call original OnEnter first (for tooltip)
-				if originalOnEnter then
-					originalOnEnter(self)
-				end
-				-- Then show our custom highlight (only if not force hidden)
-				if self.DragonUIPortraitHighlight and not self.DragonUIPortraitHighlight.forceHidden then
-					self.DragonUIPortraitHighlight:Show()
-				end
-			end)
-			
-			button:SetScript('OnLeave', function(self)
-				-- Call original OnLeave first (for tooltip)
-				if originalOnLeave then
-					originalOnLeave(self)
-				end
-				-- Then hide our custom highlight
-				if self.DragonUIPortraitHighlight then
-					self.DragonUIPortraitHighlight:Hide()
-				end
-			end)
-			
-			-- Add background for Character button (same technique as PVP button)
-			if not button.DragonUIBackground then
-				-- Background Normal (uses DOWN coords, fixed position) - like ultimaversion
-				local bg = button:CreateTexture('DragonUIBackground', 'BACKGROUND')
-				bg:SetTexture(microTexture)
-				bg:SetSize(sizeX, sizeY + 1)
-				bg:SetTexCoord(0.0654297, 0.12793, 0.330078, 0.490234)  -- ButtonBG-Down (CORRECTED)
-				bg:SetPoint('CENTER', dx, dy)
-				button.DragonUIBackground = bg
-				
-				-- Background Pressed (uses UP coords, offset position) - like ultimaversion
-				local bgPushed = button:CreateTexture('DragonUIBackgroundPushed', 'BACKGROUND')
-				bgPushed:SetTexture(microTexture)
-				bgPushed:SetSize(sizeX, sizeY + 1)
-				bgPushed:SetTexCoord(0.0654297, 0.12793, 0.494141, 0.654297)  -- ButtonBG-Up (CORRECTED)
-				bgPushed:SetPoint('CENTER', dx + offX, dy + offY)
-				bgPushed:Hide()
-				button.DragonUIBackgroundPushed = bgPushed
-			end
-			
-			-- State management for background + portrait switching
-			button.dragonUIState = {}
-			button.dragonUIState.pushed = false
-			
-			button.HandleDragonUIState = function()
-				local state = button.dragonUIState
-				if state.pushed then
-					-- FIXED: Portrait moves subtly with background when pressed (more natural movement)
-					local subtleOffX = offX * 0.3  -- Reduce movement to 30% of button offset
-					local subtleOffY = offY * 0.3  -- Reduce movement to 30% of button offset
-					button.DragonUIPortrait:SetPoint('CENTER', 0.5 + subtleOffX, -0.5 + subtleOffY)
-					button.DragonUIPortrait:SetAlpha(0.7)  -- 70% opacity when pressed
-					-- CUSTOM HIGHLIGHT: Move highlight with portrait when pressed
-					if button.DragonUIPortraitHighlight then
-						button.DragonUIPortraitHighlight:SetPoint('CENTER', 0.5 + subtleOffX, -0.5 + subtleOffY)
-					end
-					-- Background pressed shows
-					button.DragonUIBackground:Hide()
-					button.DragonUIBackgroundPushed:Show()
-				else
-					-- FIXED: Portrait in normal position (fine-tuned centering)
-					button.DragonUIPortrait:SetPoint('CENTER', 0.5, -0.5)  -- Consistent with initial position
-					button.DragonUIPortrait:SetAlpha(1.0)  -- 100% opacity when normal
-					-- CUSTOM HIGHLIGHT: Move highlight with portrait in normal state
-					if button.DragonUIPortraitHighlight then
-						button.DragonUIPortraitHighlight:SetPoint('CENTER', 0.5, -0.5)
-					end
-					-- Background normal shows
-					button.DragonUIBackground:Show()
-					button.DragonUIBackgroundPushed:Hide()
-				end
-			end
-			button.HandleDragonUIState()
-			
-			-- Register event for portrait updates
-			button:RegisterEvent('UNIT_PORTRAIT_UPDATE')
-			button:SetScript('OnEvent', function(self, event, unit)
-				if event == 'UNIT_PORTRAIT_UPDATE' and unit == 'player' then
-					SetPortraitTexture(self.DragonUIPortrait, 'player')
-				end
-			end)
-			
-			-- Timer for state checking (same as other buttons)
-			button.dragonUITimer = 0
-			button.dragonUILastState = false
-			
-			button:SetScript('OnUpdate', function(self, elapsed)
-				self.dragonUITimer = self.dragonUITimer + elapsed
-				if self.dragonUITimer >= 0.1 then
-					self.dragonUITimer = 0
-					local currentState = self:GetButtonState() == "PUSHED"
-					if currentState ~= self.dragonUILastState then
-						self.dragonUILastState = currentState
-						self.dragonUIState.pushed = currentState
-						self.HandleDragonUIState()
-					end
-				end
-			end)
 		else
             -- Use colored icons from uimicromenu2x.blp
             local microTexture = 'Interface\\AddOns\\DragonUI\\Textures\\Micromenu\\uimicromenu2x'
@@ -1308,11 +1272,13 @@ button.DragonUIBackgroundPushed = bgPushed
         if button.SetEnabled and wasEnabled then 
             button:SetEnabled(true) 
         end
-        -- MODIFIED: Always restore original handlers - this will preserve MainMenu's tooltip functionality
-        RestoreOriginalHandlers(button)
+        -- MODIFIED: Restore original handlers for all buttons EXCEPT CharacterMicroButton
+        if buttonName ~= "Character" then
+            RestoreOriginalHandlers(button)
+        end
         
 
-		buttonxOffset = buttonxOffset + iconSpacing
+        buttonxOffset = buttonxOffset + iconSpacing
 end
 
 -- Function to update only button spacing without full setup

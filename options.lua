@@ -197,6 +197,16 @@ function addon:CreateOptionsTable()
                                 set = createSetFunction("buttons", "only_actionbackground", nil, "RefreshButtons"),
                                 order = 1
                             },
+                            hide_main_bar_background = {
+                                type = 'toggle',
+                                name = "Hide Main Bar Background",
+                                desc = "Hide the background texture of the main action bar (makes it completely transparent)",
+                                get = function()
+                                    return addon.db.profile.buttons.hide_main_bar_background
+                                end,
+                                set = createSetFunction("buttons", "hide_main_bar_background", nil, "RefreshMainbars"),
+                                order = 1.5
+                            },
                             count = {
                                 type = 'group',
                                 name = "Count Text",

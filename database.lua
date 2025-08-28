@@ -55,6 +55,7 @@ local defaults = {
 		
 		buttons = {
 			only_actionbackground = true,
+			hide_main_bar_background = false,
 			count = {
 				show = true,
 			},

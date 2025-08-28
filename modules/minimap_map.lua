@@ -409,7 +409,7 @@ local function SetupQuestTracker()
     watchFrame:SetWidth(compactWidth)
     
     -- Force unlimited height for quest tracker
-    watchFrame:SetHeight(600)  -- Set a large maximum height
+    watchFrame:SetHeight(500)  -- Set a large maximum height
     if watchFrame.SetMaxLines then
         watchFrame:SetMaxLines(25)  -- Allow up to 25 quest lines
     end
