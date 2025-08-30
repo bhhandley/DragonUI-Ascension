@@ -38,13 +38,34 @@ addon.buttons_iterator = function()
 	end
 end
 
-local function actionbuttons_grid()
-	for index=1, NUM_ACTIONBAR_BUTTONS do
-		local ActionButtons = _G[format('ActionButton%d', index)]
-		ActionButtons:SetAttribute('showgrid', 1)
-		ActionButton_ShowGrid(ActionButtons)
-	end
+-- helper function to handle action button grid logic
+local function handleActionButton(button, wowAlwaysShow)
+    if wowAlwaysShow then
+        button:SetAttribute('showgrid', 1)
+        ActionButton_ShowGrid(button)
+    else
+        if HasAction(button.action) then
+            ActionButton_ShowGrid(button)
+        else
+            ActionButton_HideGrid(button)
+        end
+    end
 end
+
+function addon.actionbuttons_grid()
+    local wowAlwaysShow = GetCVar("alwaysShowActionBars") == "1"
+    local db = addon.db and addon.db.profile and addon.db.profile.buttons
+    local hideMainBg = db and db.hide_main_bar_background
+    
+    for index = 1, NUM_ACTIONBAR_BUTTONS do
+        local button = _G[format('ActionButton%d', index)]
+        if button then
+            handleActionButton(button, wowAlwaysShow)
+        end
+    end
+end
+
+
 
 local function is_petaction(self, name)
 	local spec = self:GetName():match(name)
@@ -152,7 +173,7 @@ local function main_buttons(button)
 		border:SetAllPoints(normal)
 	end
 	
-	-- apply textures
+	-- apply button textures
 	button:GetCheckedTexture():set_atlas('_ui-hud-actionbar-iconborder-checked')
 	button:GetPushedTexture():set_atlas('_ui-hud-actionbar-iconborder-pushed')
 	button:SetHighlightTexture(config.assets.highlight)
@@ -184,7 +205,7 @@ local function additional_buttons(button)
 	normal:SetPoint('TOPRIGHT', button, 2.2, 2.3)
 	normal:SetPoint('BOTTOMLEFT', button, -2.2, -2.2)
 
-	-- apply textures
+	-- apply button textures
 	button:GetCheckedTexture():set_atlas('_ui-hud-actionbar-iconborder-checked')
 	button:GetPushedTexture():set_atlas('_ui-hud-actionbar-iconborder-pushed')
 	button:SetHighlightTexture(config.assets.highlight)
@@ -228,87 +249,74 @@ local function actionbuttons_update(button)
 	button:SetNormalTexture(config.assets.normal);
 end
 
--- Refresh function for button configuration changes
 function addon.RefreshButtons()
-    local function safeRefresh()
-        local db = addon.db.profile.buttons
-        if not db then return end
+    local db = addon.db and addon.db.profile and addon.db.profile.buttons
+    if not db then return end
 
-        for button in addon.buttons_iterator() do
-            if button and button.background then
-                local buttonName = button:GetName()
-                if buttonName then
-                    local isMainActionButton = buttonName:match("^ActionButton%d+$")
+    for button in addon.buttons_iterator() do
+        if button and button.background then
+            local buttonName = button:GetName()
+            if buttonName then
+                local isMainActionButton = buttonName:match("^ActionButton%d+$")
 
-                    -- Only Action Background
-                    if db.only_actionbackground and not isMainActionButton then
-                        button.background:Hide()
+                -- show/hide action backgrounds
+                if db.only_actionbackground and not isMainActionButton then
+                    button.background:Hide()
+                else
+                    button.background:Show()
+                end
+
+                -- update hotkeys and range indicators
+                pcall(actionbuttons_hotkey, button)
+
+                -- handle macro text
+                local macros = _G[buttonName .. 'Name']
+                if macros and db.macros then
+                    if db.macros.show then
+                        macros:Show()
                     else
-                        button.background:Show()
+                        macros:Hide()
                     end
+                    if db.macros.color then macros:SetVertexColor(unpack(db.macros.color)) end
+                    if db.macros.font then macros:SetFont(unpack(db.macros.font)) end
+                end
 
-                    -- Hotkey & Range Indicator
-                    pcall(actionbuttons_hotkey, button)
+                -- handle count text
+                local count = _G[buttonName .. 'Count']
+                if count and db.count then
+                    count:SetAlpha(db.count.show and 1 or 0)
+                end
 
-                    -- Macro text
-                    local macros = _G[buttonName .. 'Name']
-                    if macros and db.macros then
-						if db.macros.show then
-							macros:Show()
-						else
-							macros:Hide()
-						end
-                        if db.macros.color then macros:SetVertexColor(unpack(db.macros.color)) end
-                        if db.macros.font then macros:SetFont(unpack(db.macros.font)) end
-                    end
-
-                    -- Count text
-                    local count = _G[buttonName .. 'Count']
-                    if count and db.count then
-                        count:SetAlpha(db.count.show and 1 or 0)
-                    end
-
-                    -- Border color
-                    local border = _G[buttonName .. 'Border']
-                    if border and db.border_color then
+                -- handle border styling and equipped state
+                local border = _G[buttonName .. 'Border']
+                if border then
+                    if db.border_color then
                         border:SetVertexColor(unpack(db.border_color))
                     end
-					
-					-- Equipped action border
-					if border then
-						if IsEquippedAction(button.action) then
-							border:SetAlpha(1)
-						else
-							border:SetAlpha(0)
-						end
-					end
-
-					-- Force a full update of the button to refresh range indicators
-					ActionButton_Update(button)
+                    border:SetAlpha(IsEquippedAction(button.action) and 1 or 0)
                 end
+
+                ActionButton_Update(button)
             end
         end
     end
-
-    pcall(safeRefresh)
 end
 
--- main buttons
+-- setup main action buttons
 for button in addon.buttons_iterator() do
 	main_buttons(button)
 	button:SetSize(37, 37)
 end
 
--- i really don't want to do it with a hook
 addon.package:RegisterEvents(function()
-	for button in addon.buttons_iterator() do
-		actionbuttons_hotkey(button)
-	end
+    addon.actionbuttons_grid(); 
+    addon.RefreshButtons();
+    collectgarbage();
 end,
-	'UPDATE_BINDINGS'
+    'PLAYER_LOGIN'
 );
 
--- vehicle buttons
+-- setup vehicle action buttons
 function addon.vehiclebuttons_template()
 	if UnitHasVehicleUI('player') then
 		for index=1, VEHICLE_MAX_ACTIONBUTTONS do
@@ -317,42 +325,85 @@ function addon.vehiclebuttons_template()
 	end
 end
 
--- possess buttons
+-- setup possess buttons
 function addon.possessbuttons_template()
 	for index=1, NUM_POSSESS_SLOTS do
 		additional_buttons(_G['PossessButton'..index])
 	end
 end
 
--- petbar buttons
+-- setup pet action buttons
 function addon.petbuttons_template()
 	for index=1, NUM_PET_ACTION_SLOTS do
 		additional_buttons(_G['PetActionButton'..index])
 	end
 end
 
--- stancebar buttons
+-- setup stance/shapeshift buttons
 function addon.stancebuttons_template()
 	for index=1, NUM_SHAPESHIFT_SLOTS do
 		additional_buttons(_G['ShapeshiftButton'..index])
 	end
 end
 
--- setup grid
-local function actionbuttons_showgrid(button)
-	local borderColor = config.buttons.border_color
-	_G[button:GetName()..'NormalTexture']:SetVertexColor(borderColor[1], borderColor[2], borderColor[3], borderColor[4])
-end
 
-addon.package:RegisterEvents(function()
-	actionbuttons_grid();
-	addon.RefreshButtons();
-	collectgarbage();
-end,
-	'PLAYER_LOGIN'
-);
 
 hooksecurefunc('ActionButton_Update', actionbuttons_update);
-hooksecurefunc('ActionButton_ShowGrid', actionbuttons_showgrid);
+
+-- cache border color to avoid repeated config access
+local cachedBorderColor = nil
+
+hooksecurefunc('ActionButton_ShowGrid', function(button)
+    if not button then return end
+    
+    local buttonName = button:GetName()
+    if not buttonName then return end
+    
+    local db = addon.db and addon.db.profile and addon.db.profile.buttons
+    
+    -- cache border color on first access
+    if not cachedBorderColor then
+        cachedBorderColor = config.buttons.border_color
+    end
+    
+    local normalTexture = _G[buttonName..'NormalTexture']
+    if not normalTexture then return end
+    
+    if db and db.hide_main_bar_background then
+        local wowAlwaysShow = GetCVar("alwaysShowActionBars") == "1"
+        
+        if buttonName:match("^ActionButton%d+$") then
+            if wowAlwaysShow or HasAction(button.action) then
+                normalTexture:SetVertexColor(cachedBorderColor[1], cachedBorderColor[2], cachedBorderColor[3], cachedBorderColor[4])
+            end
+        else
+            normalTexture:SetVertexColor(cachedBorderColor[1], cachedBorderColor[2], cachedBorderColor[3], cachedBorderColor[4])
+        end
+    else
+        normalTexture:SetVertexColor(cachedBorderColor[1], cachedBorderColor[2], cachedBorderColor[3], cachedBorderColor[4])
+    end
+end)
 
 
+
+-- monitor alwaysShowActionBars CVar changes
+local frame = CreateFrame("Frame")
+local lastState = GetCVar("alwaysShowActionBars")
+frame:SetScript("OnUpdate", function(self, elapsed)
+    self.timer = (self.timer or 0) + elapsed
+    if self.timer >= 0.3 then
+        self.timer = 0
+        local currentState = GetCVar("alwaysShowActionBars")
+        if lastState ~= currentState then
+            lastState = currentState
+            
+            -- refresh button grids when CVar changes
+            addon.actionbuttons_grid()
+            
+            -- refresh main bar background
+            if MainMenuBarMixin and MainMenuBarMixin.update_main_bar_background then
+                MainMenuBarMixin:update_main_bar_background()
+            end
+        end
+    end
+end)

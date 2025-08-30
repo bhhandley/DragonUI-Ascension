@@ -11,7 +11,7 @@ local hooksecurefunc = hooksecurefunc;
 local UnitFactionGroup = UnitFactionGroup;
 local _G = getfenv(0);
 
--- const
+-- constants
 local faction = UnitFactionGroup('player');
 local old = (config.style.xpbar == 'old');
 local new = (config.style.xpbar == 'new');
@@ -32,11 +32,13 @@ pUiMainBarArt:SetFrameStrata('HIGH');
 pUiMainBarArt:SetFrameLevel(pUiMainBar:GetFrameLevel() + 4);
 pUiMainBarArt:SetAllPoints(pUiMainBar);
 
--- [MEJORA] Nueva función de ayuda para gestionar el estilo de los grifos
 local function UpdateGryphonStyle()
-    -- Usamos addon.db.profile para que siempre lea la configuración más actual
+    -- ensure gryphon elements exist before modification
+    if not MainMenuBarLeftEndCap or not MainMenuBarRightEndCap then return end
+    
+    -- get current style settings
     local db_style = addon.db and addon.db.profile and addon.db.profile.style
-    if not db_style then db_style = config.style end -- Fallback a la config inicial si la DB no está lista
+    if not db_style then db_style = config.style end
 
     local faction = UnitFactionGroup('player')
 
@@ -103,24 +105,24 @@ function MainMenuBarMixin:actionbutton_setup()
 end
 
 function MainMenuBarMixin:actionbar_art_setup()
-    -- art
+    -- setup art frames
     MainMenuBarArtFrame:SetParent(pUiMainBar)
     for _,art in pairs({MainMenuBarLeftEndCap, MainMenuBarRightEndCap}) do
         art:SetParent(pUiMainBarArt)
         art:SetDrawLayer('ARTWORK')
     end
     
-    -- Apply background visibility (call the new function)
+    -- apply background settings
     self:update_main_bar_background()
     
-    -- [MEJORA] Llamamos a la nueva función en lugar de tener el código aquí
+    -- apply gryphon styling
     UpdateGryphonStyle()
 end
 
 function MainMenuBarMixin:update_main_bar_background()
     local alpha = (addon.db and addon.db.profile and addon.db.profile.buttons and addon.db.profile.buttons.hide_main_bar_background) and 0 or 1
     
-    -- TU CÓDIGO ACTUAL QUE FUNCIONA (fondos de botones)
+    -- handle button background textures
     for i = 1, NUM_ACTIONBAR_BUTTONS do
         local button = _G["ActionButton" .. i]
         if button then
@@ -136,7 +138,7 @@ function MainMenuBarMixin:update_main_bar_background()
     
     
     if pUiMainBar then
-        -- 1. Oculta las texturas sueltas dentro de pUiMainBar
+        -- hide loose textures within pUiMainBar
         for i = 1, pUiMainBar:GetNumRegions() do
             local region = select(i, pUiMainBar:GetRegions())
             if region and region:GetObjectType() == "Texture" then
@@ -147,12 +149,12 @@ function MainMenuBarMixin:update_main_bar_background()
             end
         end
 
-        -- 2. Oculta las texturas de los frames hijos, PERO con más protecciones
+        -- hide child frame textures with protection for UI elements
         for i = 1, pUiMainBar:GetNumChildren() do
             local child = select(i, pUiMainBar:GetChildren())
             local name = child and child:GetName()
             
-            -- PROTECCIONES COMPLETAS: Añadimos todos los elementos del micromenú
+            -- protect important UI elements from being hidden
             if child and name ~= "pUiMainBarArt" 
                     and not string.find(name or "", "ActionButton")
                     and name ~= "MainMenuExpBar" 
@@ -160,8 +162,8 @@ function MainMenuBarMixin:update_main_bar_background()
                     and name ~= "MultiBarBottomLeft"
                     and name ~= "MultiBarBottomRight"
                     and name ~= "MicroButtonAndBagsBar"
-                    and not string.find(name or "", "MicroButton")  -- Protege todos los botones del micromenú
-                    and not string.find(name or "", "Bag")          -- Protege las bolsas
+                    and not string.find(name or "", "MicroButton")
+                    and not string.find(name or "", "Bag")
                     and name ~= "CharacterMicroButton"
                     and name ~= "SpellbookMicroButton"
                     and name ~= "TalentMicroButton"
@@ -313,29 +315,30 @@ hooksecurefunc('ReputationWatchBar_Update',function()
 	end
 end)
 
--- method update position
+-- position update method
 function pUiMainBar:actionbar_update()
-	-- Read config values dynamically each time
-	local db_xprepbar = addon.db.profile.xprepbar
-	local both = db_xprepbar.bothbar_offset;
-	local single = db_xprepbar.singlebar_offset;
-	local nobar	= db_xprepbar.nobar_offset;
-
-	
-	
-	local xpbar = MainMenuExpBar:IsShown();
-	local repbar = ReputationWatchBar:IsShown();
-	if not InCombatLockdown() and not UnitAffectingCombat('player') then
-		if xpbar and repbar then
-			self:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, both);
-		elseif xpbar then
-			self:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, single);
-		elseif repbar then
-			self:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, single);
-		else
-			self:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, nobar);
-		end
-	end
+    -- cache configuration to avoid multiple accesses
+    local db_xprepbar = addon.db and addon.db.profile and addon.db.profile.xprepbar
+    if not db_xprepbar then return end
+    
+    local both = db_xprepbar.bothbar_offset;
+    local single = db_xprepbar.singlebar_offset;
+    local nobar	= db_xprepbar.nobar_offset;
+    
+    local xpbar = MainMenuExpBar:IsShown();
+    local repbar = ReputationWatchBar:IsShown();
+    
+    if not InCombatLockdown() and not UnitAffectingCombat('player') then
+        local yOffset
+        if xpbar and repbar then
+            yOffset = both
+        elseif xpbar or repbar then
+            yOffset = single
+        else
+            yOffset = nobar
+        end
+        self:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, yOffset);
+    end
 end
 
 event:RegisterEvents(function()
@@ -344,7 +347,7 @@ end,
 	'PLAYER_LOGIN','ADDON_LOADED'
 );
 
--- Set initial position when DragonUI is fully initialized
+-- set initial position when DragonUI is ready
 local function ForceInitialUpdate()
 	pUiMainBar:actionbar_update();
 end
@@ -381,23 +384,23 @@ function addon.RefreshRepBarPosition()
 	end
 end
 
--- [NUEVO] Función para actualizar dinámicamente la posición de las barras superiores
+-- update position for secondary action bars
 function addon.RefreshUpperActionBarsPosition()
     if not MultiBarBottomLeftButton1 or not MultiBarBottomRight then return end
 
-    -- Decide el desplazamiento vertical basado en la configuración
+    -- calculate offset based on background visibility
     local yOffset1, yOffset2
     if addon.db and addon.db.profile.buttons.hide_main_bar_background then
-        -- Valores cuando el fondo está OCULTO (barras más cerca)
-        yOffset1 = 45 -- Originalmente 48
-        yOffset2 = 8  -- Originalmente 8
+        -- values when background is hidden
+        yOffset1 = 45
+        yOffset2 = 8
     else
-        -- Valores por defecto cuando el fondo está VISIBLE
+        -- default values when background is visible
         yOffset1 = 48
         yOffset2 = 8
     end
 
-    -- Vuelve a anclar las barras con el nuevo desplazamiento
+    -- reposition the bars
     MultiBarBottomLeftButton1:SetClearPoint('BOTTOMLEFT', ActionButton1, 'BOTTOMLEFT', 0, yOffset1)
     MultiBarBottomRight:SetClearPoint('BOTTOMLEFT', MultiBarBottomLeftButton1, 'TOPLEFT', 0, yOffset2)
 end
@@ -411,21 +414,25 @@ end
 addon.pUiMainBar = pUiMainBar;
 MainMenuBarMixin:initialize();
 
--- Refresh function for configuration changes
+-- configuration refresh function
 function addon.RefreshMainbars()
     if not pUiMainBar then return end
     
-    local db_mainbars = addon.db.profile.mainbars
-    local db_style = addon.db.profile.style
-    local db_buttons = addon.db.profile.buttons
+    -- cache configuration to avoid multiple accesses
+    local db = addon.db and addon.db.profile
+    if not db then return end
     
-    -- Update scales
+    local db_mainbars = db.mainbars
+    local db_style = db.style
+    local db_buttons = db.buttons
+    
+    -- update bar scales
     pUiMainBar:SetScale(db_mainbars.scale_actionbar);
     if MultiBarLeft then MultiBarLeft:SetScale(db_mainbars.scale_leftbar); end
     if MultiBarRight then MultiBarRight:SetScale(db_mainbars.scale_rightbar); end
     if VehicleMenuBar then VehicleMenuBar:SetScale(db_mainbars.scale_vehicle); end
     
-    -- Update Page Buttons visibility
+    -- update page buttons visibility
     if db_buttons.pages.show then
         ActionBarUpButton:Show()
         ActionBarDownButton:Show()
@@ -436,23 +443,25 @@ function addon.RefreshMainbars()
         MainMenuBarPageNumber:Hide()
     end
 
-    -- Update main bar background visibility (call the new function)
+    -- update main bar background
     MainMenuBarMixin:update_main_bar_background()
 
-	-- [NUEVO] Llama a la función de reposicionamiento de las barras superiores
+    -- update secondary bar positioning
     addon.RefreshUpperActionBarsPosition()
+    
+    -- refresh button grids
+    if addon.actionbuttons_grid then
+        addon.actionbuttons_grid()
+    end
 
-    -- Update XP bar style
-    local old = (db_style.xpbar == 'old');
-    local new = (db_style.xpbar == 'new');
-    if old then
-        if MainMenuExpBar then MainMenuExpBar:SetStatusBarTexture("Interface\\MainMenuBar\\UI-XP-Bar"); end
-        if ReputationWatchStatusBar then ReputationWatchStatusBar:SetStatusBarTexture("Interface\\MainMenuBar\\UI-XP-Bar"); end
-    elseif new then
-        if MainMenuExpBar then MainMenuExpBar:SetStatusBarTexture("Interface\\MainMenuBar\\UI-ExperienceBar"); end
-        if ReputationWatchStatusBar then ReputationWatchStatusBar:SetStatusBarTexture("Interface\\MainMenuBar\\UI-ExperienceBar"); end
+    -- update XP bar textures
+    if MainMenuExpBar then 
+        MainMenuExpBar:SetStatusBarTexture(db_style.xpbar == 'old' and "Interface\\MainMenuBar\\UI-XP-Bar" or "Interface\\MainMenuBar\\UI-ExperienceBar")
+    end
+    if ReputationWatchStatusBar then 
+        ReputationWatchStatusBar:SetStatusBarTexture(db_style.xpbar == 'old' and "Interface\\MainMenuBar\\UI-XP-Bar" or "Interface\\MainMenuBar\\UI-ExperienceBar")
     end
     
-    -- [MEJORA] Llamamos a la nueva función en lugar de repetir todo el código
+    -- update gryphon styling
     UpdateGryphonStyle()
 end

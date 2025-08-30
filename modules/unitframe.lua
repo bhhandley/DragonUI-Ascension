@@ -1432,7 +1432,7 @@ local function HandleUnitDeath(unit)
     elseif string.match(unit or "", "^party[1-4]$") then
         local partyIndex = tonumber(string.match(unit, 'party([1-4])'))
         if partyIndex then
-            unitframe.UpdatePartyFrameText(partyIndex)
+            unitframe.ClearPartyFrameTexts(partyIndex)
         end
     elseif unit == "player" then
         unitframe.ClearPlayerFrameTexts()
@@ -6136,10 +6136,51 @@ function unitframe.UpdateAllPartyFrameText()
     end
 end
 
--- Function to update party frame text (improved system with proper 'both' logic)
+-- Clear party frame texts
+function unitframe.ClearPartyFrameTexts(i)
+    local healthbar = _G['PartyMemberFrame' .. i .. 'HealthBar']
+    local manabar = _G['PartyMemberFrame' .. i .. 'ManaBar']
+    
+    if healthbar then
+        if healthbar.DFTextString then
+            healthbar.DFTextString:Hide()
+        end
+        if healthbar.DFLeftText then
+            healthbar.DFLeftText:Hide()
+        end
+        if healthbar.DFRightText then
+            healthbar.DFRightText:Hide()
+        end
+    end
+    
+    if manabar then
+        if manabar.DFTextString then
+            manabar.DFTextString:Hide()
+        end
+        if manabar.DFLeftText then
+            manabar.DFLeftText:Hide()
+        end
+        if manabar.DFRightText then
+            manabar.DFRightText:Hide()
+        end
+    end
+end
+
 function unitframe.UpdatePartyFrameText(i)
-    -- FIXED: Validate that i is a valid number
+    -- Verificaciones como en target/pet
     if not i or type(i) ~= "number" or i < 1 or i > 4 then
+        return
+    end
+    
+    -- Verificar estado de la unidad
+    if not UnitExists('party' .. i) or UnitIsDeadOrGhost('party' .. i) then
+        unitframe.ClearPartyFrameTexts(i)
+        return
+    end
+    
+    -- Verificar conexión
+    if UnitIsPlayer('party' .. i) and UnitIsConnected and not UnitIsConnected('party' .. i) then
+        unitframe.ClearPartyFrameTexts(i)
         return
     end
 
@@ -6150,12 +6191,12 @@ function unitframe.UpdatePartyFrameText(i)
         return
     end
 
-    -- TAINT-FIX: Usar la caché segura.
+    -- TAINT-FIX: Usar la caché segura
     local config = safeConfig.party or {}
     local showHealthAlways = config.showHealthTextAlways or false
     local showManaAlways = config.showManaTextAlways or false
     local textFormat = config.textFormat or "both"
-    local useBreakup = config.breakUpLargeNumbers or false -- Get the breakup setting
+    local useBreakup = config.breakUpLargeNumbers or false
 
     -- Helper function to check mouseover (compatible with 3.3.5a)
     local function IsMouseOverBar(bar)
@@ -6190,28 +6231,35 @@ function unitframe.UpdatePartyFrameText(i)
         manabar.DFRightText:SetJustifyH("RIGHT")
     end
 
-    -- Health text logic (same as target/player/focus system)
+    -- Health text logic - CORREGIDO
     if healthbar.DFTextString then
         local health = UnitHealth('party' .. i)
-        local maxHealth = UnitHealthMax and UnitHealthMax('party' .. i) or UnitHealthMax('party' .. i)
+        local maxHealth = UnitHealthMax('party' .. i)
 
         local showHealthText = showHealthAlways or IsMouseOverBar(healthbar)
 
         if showHealthText and health and maxHealth and maxHealth > 0 then
-            local healthText = FormatStatusText(health, maxHealth, textFormat, useBreakup) -- Pass useBreakup
+            local healthText = FormatStatusText(health, maxHealth, textFormat, useBreakup)
+            
             if textFormat == 'both' and type(healthText) == 'table' then
+                -- ✅ Para formato "both": usar elementos izquierda/derecha, OCULTAR el principal
                 healthbar.DFTextString:SetText("")
+                healthbar.DFTextString:Hide() -- ← AÑADIDO: Ocultar elemento principal
                 healthbar.DFLeftText:SetText(healthText.percentage)
                 healthbar.DFRightText:SetText(healthText.current)
                 healthbar.DFLeftText:Show()
                 healthbar.DFRightText:Show()
             else
+                -- ✅ Para otros formatos: usar elemento principal, OCULTAR izquierda/derecha
                 healthbar.DFTextString:SetText(healthText)
+                healthbar.DFTextString:Show() -- ← MOVIDO: Solo mostrar cuando se usa
                 healthbar.DFLeftText:SetText("")
+                healthbar.DFLeftText:Hide() -- ← AÑADIDO: Ocultar elementos duales
                 healthbar.DFRightText:SetText("")
+                healthbar.DFRightText:Hide() -- ← AÑADIDO: Ocultar elementos duales
             end
-            healthbar.DFTextString:Show()
         else
+            -- ✅ Ocultar TODOS los elementos cuando no hay texto
             healthbar.DFTextString:SetText("")
             healthbar.DFTextString:Hide()
             healthbar.DFLeftText:SetText("")
@@ -6221,28 +6269,35 @@ function unitframe.UpdatePartyFrameText(i)
         end
     end
 
-    -- Mana text logic (same as target/player/focus system)
+    -- Mana text logic - CORREGIDO
     if manabar.DFTextString then
-        local power = UnitPower and UnitPower('party' .. i) or UnitMana('party' .. i)
-        local maxPower = UnitPowerMax and UnitPowerMax('party' .. i) or UnitManaMax('party' .. i)
+        local power = UnitPower('party' .. i)
+        local maxPower = UnitPowerMax('party' .. i)
 
         local showManaText = showManaAlways or IsMouseOverBar(manabar)
 
         if showManaText and power and maxPower and maxPower > 0 then
-            local powerText = FormatStatusText(power, maxPower, textFormat, useBreakup) -- Pass useBreakup
+            local powerText = FormatStatusText(power, maxPower, textFormat, useBreakup)
+            
             if textFormat == 'both' and type(powerText) == 'table' then
+                -- ✅ Para formato "both": usar elementos izquierda/derecha, OCULTAR el principal
                 manabar.DFTextString:SetText("")
+                manabar.DFTextString:Hide() -- ← AÑADIDO: Ocultar elemento principal
                 manabar.DFLeftText:SetText(powerText.percentage)
                 manabar.DFRightText:SetText(powerText.current)
                 manabar.DFLeftText:Show()
                 manabar.DFRightText:Show()
             else
+                -- ✅ Para otros formatos: usar elemento principal, OCULTAR izquierda/derecha
                 manabar.DFTextString:SetText(powerText)
+                manabar.DFTextString:Show() -- ← MOVIDO: Solo mostrar cuando se usa
                 manabar.DFLeftText:SetText("")
+                manabar.DFLeftText:Hide() -- ← AÑADIDO: Ocultar elementos duales
                 manabar.DFRightText:SetText("")
+                manabar.DFRightText:Hide() -- ← AÑADIDO: Ocultar elementos duales
             end
-            manabar.DFTextString:Show()
         else
+            -- ✅ Ocultar TODOS los elementos cuando no hay texto
             manabar.DFTextString:SetText("")
             manabar.DFTextString:Hide()
             manabar.DFLeftText:SetText("")
