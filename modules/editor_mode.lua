@@ -40,44 +40,63 @@ local function createExitButton()
     exitEditorButton:Hide(); -- Oculto por defecto
 end
 
+
 -- =================================================================
--- ✅ SISTEMA DE REJILLA DE FONDO (GRID)
+-- ✅ SISTEMA DE REJILLA DE FONDO (GRID) - CORRECCIÓN DE COMPATIBILIDAD 3.3.5a
 -- =================================================================
 local function createGridOverlay()
-    if gridOverlay then return; end -- No crear si ya existe
+    -- Optimización: No recrear el grid si ya existe.
+    if gridOverlay then return; end
 
-    -- El frame principal que cubrirá toda la pantalla
-    local grid = CreateFrame("Frame", "DragonUIGridOverlay", UIParent);
-    grid:SetAllPoints(UIParent);
-    grid:SetFrameStrata("BACKGROUND");
-    grid:SetFrameLevel(0);
-    grid:EnableMouse(false);
+    local boxSize = 32 -- Número de celdas de la rejilla.
+    
+    -- Frame principal que contendrá todas las líneas.
+    gridOverlay = CreateFrame('Frame', "DragonUIGridOverlayFrame", UIParent) 
+    gridOverlay:SetAllPoints(UIParent)
+    gridOverlay:SetFrameStrata("BACKGROUND");
+    gridOverlay:SetFrameLevel(0);
 
-    -- La textura que formará la rejilla (replicando el método de RetailUI)
-    local texture = grid:CreateTexture(nil, "ARTWORK");
-    
-    -- ✅ PASO 1: La textura debe ocupar todo el espacio de su frame padre.
-    texture:SetAllPoints(grid);
-    
-    -- ✅ PASO 2 (LA CLAVE): Especificamos la ruta Y EL MODO DE REPETICIÓN.
-    texture:SetTexture("Interface\\AddOns\\DragonUI\\Textures\\EditorGrid.blp", "REPEAT", "REPEAT");
-    
-    -- Aunque SetTexture ya lo define, mantenemos estos por claridad y compatibilidad.
-    texture:SetHorizTile(true);
-    texture:SetVertTile(true);
-    
-    -- ✅ PASO 3: Definimos el tamaño de la "baldosa" que se va a repetir.
-    local gridSize = 32;
-    texture:SetWidth(gridSize);
-    texture:SetHeight(gridSize);
-    
-    -- Ajustes de visibilidad
-    texture:SetVertexColor(1, 1, 1, 0.3); 
-    texture:SetBlendMode("BLEND");
+    local lineThickness = 1 
+    local screenWidth = GetScreenWidth()
+    local screenHeight = GetScreenHeight()
 
-    grid:Hide(); -- Oculta por defecto
-    gridOverlay = grid; -- Guardamos la referencia
+    -- === DIBUJAR LÍNEAS VERTICALES ===
+    local wStep = screenWidth / boxSize
+    for i = 0, boxSize do 
+        -- Usamos nombres únicos para máxima seguridad
+        local line = gridOverlay:CreateTexture("DragonUIGridLineV"..i, 'BACKGROUND') 
+        
+        if i == boxSize / 2 then 
+            -- ✅ CORRECCIÓN: Usar SetTexture, que es más compatible con 3.3.5a
+            line:SetTexture(1, 0, 0, 0.5) 
+        else 
+            line:SetTexture(0, 0, 0, 0.5) 
+        end 
+        
+        line:SetPoint("TOPLEFT", gridOverlay, "TOPLEFT", (i * wStep) - (lineThickness / 2), 0) 
+        line:SetPoint('BOTTOMRIGHT', gridOverlay, 'BOTTOMLEFT', (i * wStep) + (lineThickness / 2), 0) 
+    end 
+
+    -- === DIBUJAR LÍNEAS HORIZONTALES ===
+    local hStep = screenHeight / boxSize
+    for i = 0, boxSize do
+        -- Usamos nombres únicos para máxima seguridad
+        local line = gridOverlay:CreateTexture("DragonUIGridLineH"..i, 'BACKGROUND')
+        
+        if i == boxSize / 2 then
+            -- ✅ CORRECCIÓN: Usar SetTexture, que es más compatible con 3.3.5a
+            line:SetTexture(1, 0, 0, 0.5)
+        else
+            line:SetTexture(0, 0, 0, 0.5)
+        end
+        
+        line:SetPoint("TOPLEFT", gridOverlay, "TOPLEFT", 0, -(i * hStep) + (lineThickness / 2))
+        line:SetPoint('BOTTOMRIGHT', gridOverlay, 'TOPRIGHT', 0, -(i * hStep) - (lineThickness / 2))
+    end
+    
+    gridOverlay:Hide() -- Oculta por defecto
 end
+
 
 -- =================================================================
 -- UTILIDADES DE COORDENADAS
