@@ -3186,7 +3186,7 @@ end
 function unitframe.MovePlayerFrame(point, relativeTo, relativePoint, xOfs, yOfs)
     PlayerFrame:ClearAllPoints()
     -- Usamos _G[relativeTo] para asegurarnos de que funciona con "UIParent" u otros marcos
-    PlayerFrame:SetPoint(point, _G[relativeTo] or UIParent, relativePoint, xOfs, yOfs)
+    PlayerFrame:SetPoint(point or "TOPLEFT", _G[relativeTo or "UIParent"] or UIParent, relativePoint or "TOPLEFT", xOfs or -24, yOfs or -4)
 end
 
 function unitframe.ChangeTargetFrame()
@@ -4369,7 +4369,7 @@ end
 function unitframe.MoveTargetFrame(point, relativeTo, relativePoint, xOfs, yOfs)
     TargetFrame:ClearAllPoints()
     -- Usamos _G[relativeTo] para asegurarnos de que funciona con "UIParent" u otros marcos
-    TargetFrame:SetPoint(point, _G[relativeTo] or UIParent, relativePoint, xOfs, yOfs)
+    TargetFrame:SetPoint(point or "TOPLEFT", _G[relativeTo or "UIParent"] or UIParent, relativePoint or "TOPLEFT", xOfs or 216, yOfs or -4)
 end
 
 function unitframe.ChangeFocusFrame()
@@ -4902,7 +4902,7 @@ end
 
 function unitframe.MoveFocusFrame(point, relativeTo, relativePoint, xOfs, yOfs)
     FocusFrame:ClearAllPoints()
-    FocusFrame:SetPoint(point, _G[relativeTo] or UIParent, relativePoint, xOfs, yOfs)
+    FocusFrame:SetPoint(point or "TOPLEFT", _G[relativeTo or "UIParent"] or UIParent, relativePoint or "TOPLEFT", xOfs or 288, yOfs or -258)
 end
 function unitframe.ReApplyFocusFrame()
     -- FIXED: Función más robusta que SIEMPRE aplica colores correctamente

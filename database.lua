@@ -110,8 +110,8 @@ local defaults = {
             leftbar_offset = 90, -- Offset when bottom left is shown (for pretty_actionbar)
             rightbar_offset = 40, -- Offset when bottom right is shown (for pretty_actionbar)
             stance = {
-                x_position = 0,
-                y_offset = 0 -- Additional Y offset for fine-tuning position
+                x_position = 82,
+                y_offset = -44 -- Additional Y offset for fine-tuning position
             },
             pet = {
                 x_position = -134,
