@@ -909,23 +909,40 @@ function unitframe:ApplySettings()
             localSettings.target = {}
         end
         local objLocal = localSettings.target
-
-        -- Usar valores de la base de datos si existen, si no, los locales.
-        local anchor = targetConfig.override and targetConfig.anchor or objLocal.anchor
-        local anchorParent = targetConfig.override and targetConfig.anchorParent or objLocal.anchorParent
-        local anchorPoint = targetConfig.override and targetConfig.anchorPoint or objLocal.anchorParent -- ✅ Añadido para consistencia
-        local x = targetConfig.override and targetConfig.x or objLocal.x
-        local y = targetConfig.override and targetConfig.y or objLocal.y -- ✅ CORRECCIÓN: Typo corregido
-
-        if targetConfig.override then
-            -- ✅ CORRECCIÓN: Hacer el marco movible ANTES de establecer su posición.
-            TargetFrame:SetMovable(true)
-            TargetFrame:SetUserPlaced(true)
+        -- Set defaults if missing
+        if not objLocal.anchor then
+            objLocal.anchor = addon.defaults.profile.unitframe.target.anchor
         end
-        
-        -- ✅ Llamar a MoveTargetFrame con los argumentos correctos
-        unitframe.MoveTargetFrame(anchor, anchorParent, anchorPoint, x, y)
-        TargetFrame:SetScale(targetConfig.scale or 1)
+        if not objLocal.anchorParent then
+            objLocal.anchorParent = addon.defaults.profile.unitframe.target.anchorParent
+        end
+        if not objLocal.x then
+            objLocal.x = addon.defaults.profile.unitframe.target.x
+        end
+        if not objLocal.y then
+            objLocal.y = addon.defaults.profile.unitframe.target.y
+        end
+
+        if obj.override then
+            TargetFrame:SetMovable(1)
+            TargetFrame:StartMoving()
+            unitframe.MoveTargetFrame(obj.anchor, obj.anchorParent, obj.x, obj.y)
+            -- TargetFrame:SetUserPlaced(true)
+            TargetFrame:StopMovingOrSizing()
+            TargetFrame:SetMovable()
+        else
+            unitframe.MoveTargetFrame(objLocal.anchor, objLocal.anchorParent, objLocal.x, objLocal.y)
+        end
+		-- Support for Combo Points scaling
+        TargetFrame:SetScale(obj.scale)
+			if ComboFrame and TargetFrame then
+				ComboFrame:SetScale(TargetFrame:GetScale() or 1)
+			end
+        -- unitframe.ReApplyTargetFrame() -- REMOVED: Redundant call.
+        -- unitframe.ChangeToT() -- REMOVED: Redundant call.
+        -- if UnitExists('targettarget') then -- REMOVED: Redundant call.
+        --     unitframe.ReApplyToTFrame()
+        -- end
     end
 
      if true then
