@@ -871,7 +871,6 @@ function unitframe:SaveLocalSettings()
 
     -- DevTools_Dump({localSettings})
 end
-
 function unitframe:ApplySettings()
     -- Use centralized settings from database.lua
     -- No need for local copies of defaults
@@ -880,121 +879,91 @@ function unitframe:ApplySettings()
     do
         local playerConfig = addon:GetConfigValue("unitframe", "player") or {}
 
-        -- FIXED: Define objLocal for the player frame, this was the source of the error.
         if not localSettings.player then
             localSettings.player = {}
         end
         local objLocal = localSettings.player
 
-        -- ... (código de configuración del player sin cambios) ...
-        if not objLocal.y then
-            objLocal.y = addon.defaults.profile.unitframe.player.y
-        end
+        -- Use database values if override is active, otherwise use local (default) settings
+        local anchor = playerConfig.override and playerConfig.anchor or objLocal.anchor
+        local anchorParent = playerConfig.override and playerConfig.anchorParent or objLocal.anchorParent
+        local anchorPoint = playerConfig.override and playerConfig.anchorPoint or objLocal.anchorParent -- ✅ Get the correct anchor point
+        local x = playerConfig.override and playerConfig.x or objLocal.x
+        local y = playerConfig.override and playerConfig.y or objLocal.y
 
         if playerConfig.override then
-            unitframe.MovePlayerFrame(playerConfig.anchor, playerConfig.anchorParent, playerConfig.x, playerConfig.y)
             PlayerFrame:SetUserPlaced(true)
-        else
-            -- Fall back to stored local settings if available, otherwise use defaults
-            local anchor = objLocal.anchor or addon.defaults.profile.unitframe.player.anchor
-            local anchorParent = objLocal.anchorParent or addon.defaults.profile.unitframe.player.anchorParent
-            local x = objLocal.x or addon.defaults.profile.unitframe.player.x
-            local y = objLocal.y or addon.defaults.profile.unitframe.player.y
-            unitframe.MovePlayerFrame(anchor, anchorParent, x, y)
         end
+        
+        -- ✅ Call MovePlayerFrame with the correct arguments
+        unitframe.MovePlayerFrame(anchor, anchorParent, anchorPoint, x, y)
         PlayerFrame:SetScale(playerConfig.scale or 1)
-        -- unitframe.ChangePlayerframe() -- REMOVED: Redundant call, RefreshUnitFrames handles this.
     end
 
-    -- target
+   -- target
     do
-        local obj = {
-            override = addon:GetConfigValue("unitframe", "target", "override"),
-            anchor = addon:GetConfigValue("unitframe", "target", "anchor"),
-            anchorParent = addon:GetConfigValue("unitframe", "target", "anchorParent"),
-            x = addon:GetConfigValue("unitframe", "target", "x"),
-            y = addon:GetConfigValue("unitframe", "target", "y"),
-            scale = addon:GetConfigValue("unitframe", "target", "scale")
-        }
-        -- Ensure target settings are initialized
+        -- ✅ CORRECCIÓN: Cargar la configuración del target desde la base de datos.
+        local targetConfig = addon:GetConfigValue("unitframe", "target") or {}
+
         if not localSettings.target then
             localSettings.target = {}
         end
         local objLocal = localSettings.target
-        -- Set defaults if missing
-        if not objLocal.anchor then
-            objLocal.anchor = addon.defaults.profile.unitframe.target.anchor
-        end
-        if not objLocal.anchorParent then
-            objLocal.anchorParent = addon.defaults.profile.unitframe.target.anchorParent
-        end
-        if not objLocal.x then
-            objLocal.x = addon.defaults.profile.unitframe.target.x
-        end
-        if not objLocal.y then
-            objLocal.y = addon.defaults.profile.unitframe.target.y
-        end
 
-        if obj.override then
-            TargetFrame:SetMovable(1)
-            TargetFrame:StartMoving()
-            unitframe.MoveTargetFrame(obj.anchor, obj.anchorParent, obj.x, obj.y)
-            -- TargetFrame:SetUserPlaced(true)
-            TargetFrame:StopMovingOrSizing()
-            TargetFrame:SetMovable()
-        else
-            unitframe.MoveTargetFrame(objLocal.anchor, objLocal.anchorParent, objLocal.x, objLocal.y)
+        -- Usar valores de la base de datos si existen, si no, los locales.
+        local anchor = targetConfig.override and targetConfig.anchor or objLocal.anchor
+        local anchorParent = targetConfig.override and targetConfig.anchorParent or objLocal.anchorParent
+        local anchorPoint = targetConfig.override and targetConfig.anchorPoint or objLocal.anchorParent -- ✅ Añadido para consistencia
+        local x = targetConfig.override and targetConfig.x or objLocal.x
+        local y = targetConfig.override and targetConfig.y or objLocal.y -- ✅ CORRECCIÓN: Typo corregido
+
+        if targetConfig.override then
+            -- ✅ CORRECCIÓN: Hacer el marco movible ANTES de establecer su posición.
+            TargetFrame:SetMovable(true)
+            TargetFrame:SetUserPlaced(true)
         end
-        TargetFrame:SetScale(obj.scale)
-        -- unitframe.ReApplyTargetFrame() -- REMOVED: Redundant call.
-        -- unitframe.ChangeToT() -- REMOVED: Redundant call.
-        -- if UnitExists('targettarget') then -- REMOVED: Redundant call.
-        --     unitframe.ReApplyToTFrame()
-        -- end
+        
+        -- ✅ Llamar a MoveTargetFrame con los argumentos correctos
+        unitframe.MoveTargetFrame(anchor, anchorParent, anchorPoint, x, y)
+        TargetFrame:SetScale(targetConfig.scale or 1)
     end
 
-    if true then
+     if true then
         -- focus
         do
-            local obj = {
-                override = addon:GetConfigValue("unitframe", "focus", "override"),
-                anchor = addon:GetConfigValue("unitframe", "focus", "anchor"),
-                anchorParent = addon:GetConfigValue("unitframe", "focus", "anchorParent"),
-                x = addon:GetConfigValue("unitframe", "focus", "x"),
-                y = addon:GetConfigValue("unitframe", "focus", "y"),
-                scale = addon:GetConfigValue("unitframe", "focus", "scale")
-            }
-            -- Ensure focus settings are initialized
+            -- ✅ CORRECCIÓN: Usar la misma lógica de carga que Player/Target.
+            local focusConfig = addon:GetConfigValue("unitframe", "focus") or {}
+
             if not localSettings.focus then
                 localSettings.focus = {}
             end
             local objLocal = localSettings.focus
-            -- Set defaults if missing
-            if not objLocal.anchor then
-                objLocal.anchor = addon.defaults.profile.unitframe.focus.anchor
-            end
-            if not objLocal.anchorParent then
-                objLocal.anchorParent = addon.defaults.profile.unitframe.focus.anchorParent
-            end
-            if not objLocal.x then
-                objLocal.x = addon.defaults.profile.unitframe.focus.x
-            end
-            if not objLocal.y then
-                objLocal.y = addon.defaults.profile.unitframe.focus.y
+
+            -- Usar valores de la base de datos si override está activo, si no, los locales.
+            local anchor = focusConfig.override and focusConfig.anchor or objLocal.anchor
+            local anchorParent = focusConfig.override and focusConfig.anchorParent or objLocal.anchorParent
+            local anchorPoint = focusConfig.override and focusConfig.anchorPoint or objLocal.anchorParent
+            local x = focusConfig.override and focusConfig.x or objLocal.x
+            local y = focusConfig.override and focusConfig.y or objLocal.y
+            local scale = focusConfig.scale or 1.0
+
+            if focusConfig.override then
+                FocusFrame:SetMovable(true) -- Hacerlo movible primero
+                FocusFrame:SetUserPlaced(true)
             end
 
-            if obj.override then
-                unitframe.MoveFocusFrame(obj.anchor, obj.anchorParent, obj.x, obj.y)
-                FocusFrame:SetUserPlaced(true)
-            else
-                unitframe.MoveFocusFrame(objLocal.anchor, objLocal.anchorParent, objLocal.x, objLocal.y)
-            end
-            FocusFrame:SetScale(obj.scale)
-            -- unitframe.ReApplyFocusFrame() -- REMOVED: Redundant call.
-            -- unitframe.ChangeFocusToT() -- REMOVED: Redundant call.
-            -- if UnitExists('focustarget') then -- REMOVED: Redundant call.
-            --     unitframe.ReApplyFocusToTFrame()
-            -- end
+            -- ✅ Llamar a MoveFocusFrame con los 5 argumentos correctos.
+            unitframe.MoveFocusFrame(anchor, anchorParent, anchorPoint, x, y)
+            FocusFrame:SetScale(scale)
+        end
+    end
+    -- ✅ AÑADIDO: Lógica para aplicar la configuración del grupo.
+    do
+        local partyConfig = addon:GetConfigValue("unitframe", "party") or {}
+        if unitframe.PartyMoveFrame then
+            -- La función UpdatePartyState ya contiene toda la lógica de posicionamiento.
+            -- Simplemente la llamamos para que aplique la configuración guardada.
+            unitframe:UpdatePartyState(partyConfig)
         end
     end
 
@@ -2564,12 +2533,32 @@ function unitframe.HookVertexColor()
         end
 
         -- Hook focus events for consistent color updates  
-        FocusFrame:HookScript('OnEvent', function(self, event, arg1)
-            if event == 'PLAYER_FOCUS_CHANGED' then
-                updateFocusFrameHealthBar()
+       FocusFrame:HookScript('OnEvent', function(self, event, arg1)
+    if event == 'PARTY_MEMBERS_CHANGED' or event == 'GROUP_ROSTER_UPDATE' then
+        -- SIMPLE: Solo aplicar colores sin logging ni delays complejos
+        if UnitExists('focus') then
+            -- Obtener configuración actual
+            local shouldUseClassColor = addon:GetConfigValue("unitframe", "focus", "classcolor") and UnitIsPlayer('focus')
+            
+            if shouldUseClassColor then
+                local localizedClass, englishClass, classIndex = UnitClass('focus')
+                if englishClass and RAID_CLASS_COLORS[englishClass] then
+                    local color = RAID_CLASS_COLORS[englishClass]
+                    FocusFrameHealthBar:SetStatusBarColor(color.r, color.g, color.b, 1)
+                else
+                    FocusFrameHealthBar:SetStatusBarColor(1, 1, 1, 1)
+                end
+            else
+                FocusFrameHealthBar:SetStatusBarColor(1, 1, 1, 1)
             end
-        end)
-
+            
+            -- Asegurar color blanco en mana (sin verificaciones complejas)
+            if FocusFrameManaBar then
+                FocusFrameManaBar:SetStatusBarColor(1, 1, 1, 1)
+            end
+        end
+    end
+end)
         FocusFrameHealthBar:HookScript('OnValueChanged', function(self)
             if addon:GetConfigValue("unitframe", "focus", "classcolor") and UnitIsPlayer('focus') then
                 FocusFrameHealthBar:GetStatusBarTexture():SetTexture(
@@ -3133,9 +3122,10 @@ end
 -- No llamar UpdateStatus inmediatamente - dejar que los eventos lo manejen
 -- UpdateStatus()
 
-function unitframe.MovePlayerFrame(anchor, anchorOther, dx, dy)
+function unitframe.MovePlayerFrame(point, relativeTo, relativePoint, xOfs, yOfs)
     PlayerFrame:ClearAllPoints()
-    PlayerFrame:SetPoint(anchor, UIParent, anchorOther, dx, dy)
+    -- Usamos _G[relativeTo] para asegurarnos de que funciona con "UIParent" u otros marcos
+    PlayerFrame:SetPoint(point, _G[relativeTo] or UIParent, relativePoint, xOfs, yOfs)
 end
 
 function unitframe.ChangeTargetFrame()
@@ -4315,9 +4305,10 @@ function unitframe.FormatToTNumber(value)
     end
 end
 
-function unitframe.MoveTargetFrame(anchor, anchorOther, dx, dy)
+function unitframe.MoveTargetFrame(point, relativeTo, relativePoint, xOfs, yOfs)
     TargetFrame:ClearAllPoints()
-    TargetFrame:SetPoint(anchor, UIParent, anchorOther, dx, dy)
+    -- Usamos _G[relativeTo] para asegurarnos de que funciona con "UIParent" u otros marcos
+    TargetFrame:SetPoint(point, _G[relativeTo] or UIParent, relativePoint, xOfs, yOfs)
 end
 
 function unitframe.ChangeFocusFrame()
@@ -4848,76 +4839,61 @@ function unitframe.ChangeFocusFrame()
     end
 end
 
-function unitframe.MoveFocusFrame(anchor, anchorOther, dx, dy)
+function unitframe.MoveFocusFrame(point, relativeTo, relativePoint, xOfs, yOfs)
     FocusFrame:ClearAllPoints()
-    FocusFrame:SetPoint(anchor, UIParent, anchorOther, dx, dy)
+    FocusFrame:SetPoint(point, _G[relativeTo] or UIParent, relativePoint, xOfs, yOfs)
 end
-
 function unitframe.ReApplyFocusFrame()
-    if addon:GetConfigValue("unitframe", "focus", "classcolor") and UnitIsPlayer('focus') then
-        FocusFrameHealthBar:GetStatusBarTexture():SetTexture(
-            'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health-Status')
+    -- FIXED: Función más robusta que SIEMPRE aplica colores correctamente
+    
+    if not UnitExists('focus') then
+      
+        return
+    end
+    
+  
+    
+    -- 1. SIEMPRE aplicar la configuración de colores de clase
+    local shouldUseClassColor = addon:GetConfigValue("unitframe", "focus", "classcolor") and UnitIsPlayer('focus')
+    
+    
+    
+    if shouldUseClassColor then
         local localizedClass, englishClass, classIndex = UnitClass('focus')
-        FocusFrameHealthBar:SetStatusBarColor(RAID_CLASS_COLORS[englishClass].r, RAID_CLASS_COLORS[englishClass].g,
-            RAID_CLASS_COLORS[englishClass].b, 1)
+        if englishClass and RAID_CLASS_COLORS[englishClass] then
+            FocusFrameHealthBar:GetStatusBarTexture():SetTexture(
+                'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health-Status')
+            local color = RAID_CLASS_COLORS[englishClass]
+            FocusFrameHealthBar:SetStatusBarColor(color.r, color.g, color.b, 1)
+            
+           
+        else
+            -- Fallback si no se puede obtener la clase
+            FocusFrameHealthBar:GetStatusBarTexture():SetTexture(
+                'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health')
+            FocusFrameHealthBar:SetStatusBarColor(1, 1, 1, 1)
+          
+        end
     else
+        -- CRÍTICO: Colores de clase deshabilitados o no es jugador - FORZAR BLANCO
         FocusFrameHealthBar:GetStatusBarTexture():SetTexture(
             'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health')
         FocusFrameHealthBar:SetStatusBarColor(1, 1, 1, 1)
     end
 
-    -- BORDER con sublevel bajo: por encima del fondo, por debajo de todo lo demás
+    -- 2. CRÍTICO: FORZAR el DrawLayer correcto
     FocusFrameHealthBar:GetStatusBarTexture():SetDrawLayer("BORDER", 1)
 
-    -- [[ INICIO DE LA LÓGICA DE RECORTE DINÁMICO PARA LA BARRA DE VIDA DEL FOCUS ]]
-    if not FocusFrameHealthBar.DragonUI_HealthBarHooked then
-        FocusFrameHealthBar:HookScript("OnValueChanged", function(self, value)
-            if not UnitExists("focus") then
-                return
-            end
-
-            local statusBarTexture = self:GetStatusBarTexture()
-
-            -- Aplicar la textura correcta según la configuración de color de clase
-            if addon:GetConfigValue("unitframe", "focus", "classcolor") and UnitIsPlayer('focus') then
-                statusBarTexture:SetTexture(
-                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health-Status')
-            else
-                statusBarTexture:SetTexture(
-                    'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health')
-            end
-
-            -- BORDER con sublevel bajo: por encima del fondo, por debajo de todo lo demás
-            statusBarTexture:SetDrawLayer("BORDER", 1)
-
-            -- La magia del recorte dinámico: ajustamos las coordenadas de la textura.
-            local min, max = self:GetMinMaxValues()
-            if max > 0 and value then
-                local percentage = value / max
-                -- SetTexCoord(izquierda, derecha, arriba, abajo)
-                -- Recortamos la coordenada derecha para que coincida con el porcentaje.
-                statusBarTexture:SetTexCoord(0, percentage, 0, 1)
-            else
-                -- Si no hay valor o el máximo es 0, mostramos la textura completa.
-                statusBarTexture:SetTexCoord(0, 1, 0, 1)
-            end
-
-            -- Nos aseguramos de que no se aplique ningún tinte de color que arruine la textura.
-            statusBarTexture:SetVertexColor(1, 1, 1, 1)
-        end)
-        -- Marcamos que el hook ya ha sido aplicado.
-        FocusFrameHealthBar.DragonUI_HealthBarHooked = true
-    end
-
-    -- Forzamos una actualización inicial de la barra de vida para que nuestro nuevo hook se ejecute.
+    -- 3. CRÍTICO: FORZAR actualización del valor para triggear el hook de OnValueChanged
     if UnitExists("focus") then
         local currentHealth = UnitHealth("focus")
         local maxHealth = UnitHealthMax("focus")
         FocusFrameHealthBar:SetMinMaxValues(0, maxHealth)
         FocusFrameHealthBar:SetValue(currentHealth)
+      
     end
-    -- [[ FIN DE LA LÓGICA DE RECORTE DINÁMICO PARA LA BARRA DE VIDA DEL FOCUS ]]
 
+    -- 4. CRÍTICO: Aplicar configuración de power bar con COLOR BLANCO FORZADO
     local powerType, powerTypeString = UnitPowerType('focus')
 
     if powerTypeString == 'MANA' then
@@ -4937,15 +4913,21 @@ function unitframe.ReApplyFocusFrame()
             'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-RunicPower')
     end
 
-    -- Do not force mana bar color here - let the natural color system handle it
+    -- CRÍTICO: SIEMPRE forzar color blanco en la barra de poder
+    FocusFrameManaBar:SetStatusBarColor(1, 1, 1, 1)
 
+
+    -- 5. Ocultar flash de combate si existe
     if FocusFrameFlash then
         FocusFrameFlash:SetTexture('')
     end
 
+    -- 6. Actualizar extra portrait si existe
     if frame.FocusExtra then
         frame.FocusExtra:UpdateStyle()
     end
+    
+
 end
 
 -- FIXED: Focus ToT Frame Functions - Completely Rewritten like Target ToT
@@ -6054,50 +6036,63 @@ function unitframe:UpdatePartyState(state)
         return
     end
 
-    -- Ensure all required values have defaults
-    local safeState = {
-        anchor = state.anchor or 'TOPLEFT',
-        anchorParent = state.anchorParent or 'TOPLEFT',
-        x = state.x or 10,
-        y = state.y or -100,
-        scale = state.scale or 1.0,
-        padding = state.padding or 10,
-        orientation = state.orientation or 'vertical',
-        override = state.override or false,
-        anchorFrame = state.anchorFrame
-    }
-
-    local parent = UIParent
-    if safeState.override and safeState.anchorFrame then
-        parent = _G[safeState.anchorFrame] or UIParent
+    -- ✅ CORRECCIÓN: Lógica de carga robusta que respeta el 'override'.
+    local partyConfig = addon:GetConfigValue("unitframe", "party") or {}
+    
+    -- Determinar los valores a usar basados en el override.
+    local anchor, parent, anchorPoint, x, y
+    if partyConfig.override then
+        -- Si override está activo, usamos los valores guardados.
+        anchor = partyConfig.anchor or 'BOTTOMLEFT'
+        parent = _G[partyConfig.anchorParent] or UIParent
+        anchorPoint = partyConfig.anchorPoint or 'BOTTOMLEFT'
+        x = partyConfig.x or 10
+        y = partyConfig.y or -100
+    else
+        -- Si no, usamos los valores por defecto del addon.
+        anchor = 'TOPLEFT'
+        parent = UIParent
+        anchorPoint = 'TOPLEFT'
+        x = 10
+        y = -120
     end
 
-    unitframe.PartyMoveFrame:ClearAllPoints()
-    unitframe.PartyMoveFrame:SetPoint(safeState.anchor, parent, safeState.anchorParent, safeState.x, safeState.y)
-    unitframe.PartyMoveFrame:SetScale(safeState.scale)
+    -- Valores que no dependen del override (escala, padding, etc.)
+    local scale = partyConfig.scale or 1.0
+    local padding = partyConfig.padding or 10
+    local orientation = partyConfig.orientation or 'vertical'
 
+    -- Aplicar la posición y escala.
+    unitframe.PartyMoveFrame:ClearAllPoints()
+    unitframe.PartyMoveFrame:SetPoint(anchor, parent, anchorPoint, x, y)
+    unitframe.PartyMoveFrame:SetScale(scale)
+
+    -- El resto de la lógica para la orientación y el tamaño se mantiene.
     local sizeX, sizeY = _G['PartyMemberFrame' .. 1]:GetSize()
 
-    if safeState.orientation == 'vertical' then
-        unitframe.PartyMoveFrame:SetSize(sizeX, sizeY * 4 + 3 * safeState.padding)
+    if orientation == 'vertical' then
+        unitframe.PartyMoveFrame:SetSize(sizeX, sizeY * 4 + 3 * padding)
     else
-        unitframe.PartyMoveFrame:SetSize(sizeX * 4 + 3 * safeState.padding, sizeY)
+        unitframe.PartyMoveFrame:SetSize(sizeX * 4 + 3 * padding, sizeY)
     end
 
     for i = 2, 4 do
         local pf = _G['PartyMemberFrame' .. i]
-        if safeState.orientation == 'vertical' then
+        if orientation == 'vertical' then
             pf:ClearAllPoints()
-            pf:SetPoint('TOPLEFT', _G['PartyMemberFrame' .. (i - 1)], 'BOTTOMLEFT', 0, -safeState.padding)
+            pf:SetPoint('TOPLEFT', _G['PartyMemberFrame' .. (i - 1)], 'BOTTOMLEFT', 0, -padding)
         else
             pf:ClearAllPoints()
-            pf:SetPoint('TOPLEFT', _G['PartyMemberFrame' .. (i - 1)], 'TOPRIGHT', safeState.padding, 0)
+            pf:SetPoint('TOPLEFT', _G['PartyMemberFrame' .. (i - 1)], 'TOPRIGHT', padding, 0)
         end
     end
 
+    -- Actualizar las barras de los miembros del grupo.
     for i = 1, 4 do
-        unitframe.UpdatePartyHPBar(i)
-        unitframe.UpdatePartyManaBar(i)
+        if UnitExists("party"..i) then
+            unitframe.UpdatePartyHPBar(i)
+            unitframe.UpdatePartyManaBar(i)
+        end
     end
 end
 
@@ -7120,7 +7115,47 @@ function eventFrame:OnEvent(event, arg1)
             unitframe.UpdatePartyFrameText(partyIndex)
             unitframe.UpdatePartyManaBar(partyIndex)
         end
+
     elseif event == 'UNIT_POWER_UPDATE' then
+
+        elseif event == "PARTY_MEMBERS_CHANGED" or event == "GROUP_ROSTER_UPDATE" then
+        -- SOLUCIÓN SIMPLE: Llamar a la función que ya existe pero no se usa
+        for i = 1, 4 do
+            local pf = _G['PartyMemberFrame' .. i]
+            if pf then
+                if not UnitExists('party' .. i) then
+                    -- ESTO YA EXISTE en UpdatePartyState pero no se llama aquí
+                    pf:Hide()
+                    pf:SetAlpha(0)
+                    unitframe.ClearPartyFrameTexts(i)
+                else
+                    pf:Show()
+                    pf:SetAlpha(1)
+                    unitframe.UpdatePartyHPBar(i)
+                    unitframe.UpdatePartyManaBar(i)
+                    unitframe.UpdatePartyFrameText(i)
+                end
+            end
+        end
+        
+        -- El código del focus ya funciona bien
+        if UnitExists('focus') then
+            local shouldUseClassColor = addon:GetConfigValue("unitframe", "focus", "classcolor") and UnitIsPlayer('focus')
+            if shouldUseClassColor then
+                local localizedClass, englishClass, classIndex = UnitClass('focus')
+                if englishClass and RAID_CLASS_COLORS[englishClass] then
+                    local color = RAID_CLASS_COLORS[englishClass]
+                    FocusFrameHealthBar:SetStatusBarColor(color.r, color.g, color.b, 1)
+                else
+                    FocusFrameHealthBar:SetStatusBarColor(1, 1, 1, 1)
+                end
+            else
+                FocusFrameHealthBar:SetStatusBarColor(1, 1, 1, 1)
+            end
+            if FocusFrameManaBar then
+                FocusFrameManaBar:SetStatusBarColor(1, 1, 1, 1)
+            end
+        end
         -- WoW 3.3.5a specific mana events
     elseif event == 'UNIT_MANA' and string.match(arg1, '^party[1-4]$') then
         -- Update party frame mana when mana changes (3.3.5a specific)
@@ -7259,6 +7294,8 @@ eventFrame:RegisterEvent('PLAYER_DEAD')
 eventFrame:RegisterEvent('PLAYER_ALIVE')
 eventFrame:RegisterEvent('PLAYER_UNGHOST')
 eventFrame:RegisterEvent('UNIT_CONNECTION')
+eventFrame:RegisterEvent('PARTY_MEMBERS_CHANGED')
+eventFrame:RegisterEvent('GROUP_ROSTER_UPDATE')
 
 -- Module initialization compatible with DragonUI
 local frameInit = CreateFrame("Frame")
@@ -7759,60 +7796,6 @@ if PlayerFrame and TargetFrame then
         unitframe.ReApplyFocusToTFrame()
     end
 
-    -- party frames
-    do
-        local obj = {
-            override = addon:GetConfigValue("unitframe", "party", "override") or false,
-            anchor = addon:GetConfigValue("unitframe", "party", "anchor") or 'TOPLEFT',
-            anchorParent = addon:GetConfigValue("unitframe", "party", "anchorParent") or 'TOPLEFT',
-            x = addon:GetConfigValue("unitframe", "party", "x") or 10,
-            y = addon:GetConfigValue("unitframe", "party", "y") or -100,
-            scale = addon:GetConfigValue("unitframe", "party", "scale") or 1.0,
-            padding = addon:GetConfigValue("unitframe", "party", "padding") or 10,
-            orientation = addon:GetConfigValue("unitframe", "party", "orientation") or 'vertical'
-        }
-        -- Ensure party settings are initialized
-        if not localSettings.party then
-            localSettings.party = {}
-        end
-        local objLocal = localSettings.party
-        -- Set defaults if missing
-        if not objLocal.anchor then
-            objLocal.anchor = addon.defaults.profile.unitframe.party.anchor
-        end
-        if not objLocal.anchorParent then
-            objLocal.anchorParent = addon.defaults.profile.unitframe.party.anchorParent
-        end
-        if not objLocal.x then
-            objLocal.x = addon.defaults.profile.unitframe.party.x
-        end
-        if not objLocal.y then
-            objLocal.y = addon.defaults.profile.unitframe.party.y
-        end
-
-        -- Initialize party frames if they don't exist
-        if not unitframe.PartyMoveFrame then
-            -- Add safety check for party frames existence
-            if _G['PartyMemberFrame1'] then
-                unitframe.ChangePartyFrame()
-            else
-            end
-        end
-
-        if unitframe.PartyMoveFrame then
-            unitframe:UpdatePartyState(obj)
-            -- Party frames positioned
-
-            -- FIXED: Initialize mana coordinates for ALL party frames (not just visible ones)
-            for i = 1, 4 do
-                local manabar = _G['PartyMemberFrame' .. i .. 'ManaBar']
-                if manabar then
-                    local powerType = UnitPowerType('party' .. i) or 0
-                    unitframe.SetPartyManaBarCoords(manabar, powerType)
-                end
-            end
-        end
-    end
 end
 
 function unitframe.HookManaBarColors()

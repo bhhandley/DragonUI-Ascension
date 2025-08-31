@@ -153,9 +153,16 @@ function addon.core:SlashCommand(input)
 		LibStub("AceConfigDialog-3.0"):Open("DragonUI");
 	elseif input:lower() == "config" then
 		LibStub("AceConfigDialog-3.0"):Open("DragonUI");
+	elseif input:lower() == "edit" or input:lower() == "editor" then
+		if addon.EditorMode then
+			addon.EditorMode:Toggle();
+		else
+			self:Print("Editor mode not available. Make sure the editor_mode module is loaded.");
+		end
 	else
 		self:Print("Commands:");
 		self:Print("/dragonui config - Open configuration");
+		self:Print("/dragonui edit - Toggle editor mode for moving UI elements");
 	end
 end
 

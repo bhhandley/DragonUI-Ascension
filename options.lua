@@ -116,6 +116,42 @@ function addon:CreateOptionsTable()
         name = "DragonUI",
         type = 'group',
         args = {
+            -- ✅ BOTÓN PARA ACTIVAR EL MODO DE EDICIÓN
+            toggle_editor_mode = {
+                type = 'execute',
+                name = function()
+                    -- El nombre del botón cambia dinámicamente
+                    if addon.EditorMode and addon.EditorMode:IsActive() then
+                        return "|cffFF6347Editor Mode Active|r"
+                    else
+                        return "|cff00FF00Move UI Elements|r"
+                    end
+                end,
+                desc = "Unlock UI elements to move them with your mouse. A button will appear to exit this mode.",
+                func = function()
+                   -- ✅ CORRECCIÓN 3: Ocultar el tooltip para que no se quede pegado.
+                    GameTooltip:Hide()
+                    
+                    -- Usar la función de la librería para cerrar su propia ventana.
+                    LibStub("AceConfigDialog-3.0"):Close("DragonUI")
+                    
+                    -- Llama a la función Toggle del editor_mode.lua
+                    if addon.EditorMode then
+                        addon.EditorMode:Toggle()
+                    end
+                end,
+                -- Se deshabilita mientras el modo editor está activo para evitar conflictos
+                disabled = function()
+                    return addon.EditorMode and addon.EditorMode:IsActive()
+                end,
+                order = 0 -- El orden más bajo para que aparezca primero
+            },
+            -- ✅ SEPARADOR VISUAL
+            editor_separator = {
+                type = 'header',
+                name = ' ', -- Un espacio en blanco actúa como separador
+                order = 0.5
+            },
             actionbars = {
                 type = 'group',
                 name = "Action Bars",
@@ -140,44 +176,96 @@ function addon:CreateOptionsTable()
                                 set = createSetFunction("mainbars", "scale_actionbar", nil, "RefreshMainbars"),
                                 order = 1
                             },
-                            scale_rightbar = {
-                                type = 'range',
-                                name = "Right Bar Scale",
-                                desc = "Scale for multibar right (under minimap)",
-                                min = 0.5,
-                                max = 2.0,
-                                step = 0.1,
-                                get = function()
-                                    return addon.db.profile.mainbars.scale_rightbar
-                                end,
-                                set = createSetFunction("mainbars", "scale_rightbar", nil, "RefreshMainbars"),
-                                order = 2
+                            -- AÑADIR CONFIGURACIONES DE POSICIÓN
+                           header_position = {
+                                type = 'header',
+                                name = "Action Bar Positions",
+                                order = 4.5
                             },
-                            scale_leftbar = {
-                                type = 'range',
-                                name = "Left Bar Scale",
-                                desc = "Scale for multibar left (under minimap)",
-                                min = 0.5,
-                                max = 2.0,
-                                step = 0.1,
-                                get = function()
-                                    return addon.db.profile.mainbars.scale_leftbar
+                            -- ✅ AÑADIMOS UNA DESCRIPCIÓN INTELIGENTE
+                            editor_mode_desc = {
+                                type = 'description',
+                                name = "|cffFFD700Tip:|r Use the |cff00FF00/duiedit|r command to unlock and move the bars with your mouse.",
+                                order = 4.51,
+                                -- Solo se muestra si NINGUNA barra ha sido movida manualmente.
+                                hidden = function()
+                                    local db = addon.db.profile.mainbars
+                                    return db.player.override or db.left.override or db.right.override
                                 end,
-                                set = createSetFunction("mainbars", "scale_leftbar", nil, "RefreshMainbars"),
-                                order = 3
                             },
-                            scale_vehicle = {
-                                type = 'range',
-                                name = "Vehicle Bar Scale",
-                                desc = "Scale for vehicle bar",
-                                min = 0.5,
-                                max = 2.0,
-                                step = 0.1,
-                                get = function()
-                                    return addon.db.profile.mainbars.scale_vehicle
+                            reset_positions = {
+                                type = 'execute',
+                                name = "Reset Bar Positions",
+                                desc = "Resets all action bars to their default positions.",
+                                func = function()
+                                    local db = addon.db.profile.mainbars
+                                    db.player.override = false
+                                    db.left.override = false
+                                    db.right.override = false
+                                    -- Opcional: resetear también las coordenadas a 0.
+                                    db.player.x, db.player.y = 0, 0
+                                    db.left.x, db.left.y = 0, 0
+                                    db.right.x, db.right.y = 0, 0
+                                    
+                                    addon.PositionActionBars()
                                 end,
-                                set = createSetFunction("mainbars", "scale_vehicle", nil, "RefreshMainbars"),
-                                order = 4
+                                order = 4.6
+                             },
+                            -- ✅ ACTUALIZADOS LOS SLIDERS PARA USAR LA NUEVA ESTRUCTURA Y LÓGICA 'disabled'.
+                            x_position = {
+                                type = 'range',
+                                name = "Main Bar X",
+                                min = 0, max = 2500, step = 1,
+                                get = function() return addon.db.profile.mainbars.player.x or 0 end,
+                                set = createInstantSetFunction("mainbars", "player", "x", "PositionActionBars"),
+                                order = 5,
+                                -- Se deshabilita si la barra no está en modo 'override'.
+                                disabled = function() return not addon.db.profile.mainbars.player.override end
+                            },
+                            y_position = {
+                                type = 'range',
+                                name = "Main Bar Y",
+                                min = 0, max = 1500, step = 1,
+                                get = function() return addon.db.profile.mainbars.player.y or 0 end,
+                                set = createInstantSetFunction("mainbars", "player", "y", "PositionActionBars"),
+                                order = 6,
+                                disabled = function() return not addon.db.profile.mainbars.player.override end
+                            },
+                            multibar_left_x = {
+                                type = 'range',
+                                name = "Left Bar X",
+                                min = 0, max = 2500, step = 1,
+                                get = function() return addon.db.profile.mainbars.left.x or 0 end,
+                                set = createInstantSetFunction("mainbars", "left", "x", "PositionActionBars"),
+                                order = 7,
+                                disabled = function() return not addon.db.profile.mainbars.left.override end
+                            },
+                            multibar_left_y = {
+                                type = 'range',
+                                name = "Left Bar Y",
+                                min = 0, max = 1500, step = 1,
+                                get = function() return addon.db.profile.mainbars.left.y or 0 end,
+                                set = createInstantSetFunction("mainbars", "left", "y", "PositionActionBars"),
+                                order = 8,
+                                disabled = function() return not addon.db.profile.mainbars.left.override end
+                            },
+                            multibar_right_x = {
+                                type = 'range',
+                                name = "Right Bar X",
+                                min = 0, max = 2500, step = 1,
+                                get = function() return addon.db.profile.mainbars.right.x or 0 end,
+                                set = createInstantSetFunction("mainbars", "right", "x", "PositionActionBars"),
+                                order = 9,
+                                disabled = function() return not addon.db.profile.mainbars.right.override end
+                            },
+                            multibar_right_y = {
+                                type = 'range',
+                                name = "Right Bar Y",
+                                min = 0, max = 1500, step = 1,
+                                get = function() return addon.db.profile.mainbars.right.y or 0 end,
+                                set = createInstantSetFunction("mainbars", "right", "y", "PositionActionBars"),
+                                order = 10,
+                                disabled = function() return not addon.db.profile.mainbars.right.override end
                             }
                         }
                     },

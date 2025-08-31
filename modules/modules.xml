@@ -28,4 +28,7 @@
     
     <!-- Game Menu module -->
     <Script file="gamemenu.lua"/>
+    
+    <!-- Editor Mode module -->
+    <Script file="editor_mode.lua"/>
 </Ui>

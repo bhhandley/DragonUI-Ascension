@@ -23,7 +23,7 @@ A personal project bringing Dragonflight UI aesthetics to WotLK 3.3.5a.
 
 ## Installation
 
-1. Download the latest release from the [Releases page](https://github.com/NeticSoul/DragonUI/releases/tag/v1.0.4)
+1. Download the latest release from the [Releases page](https://github.com/NeticSoul/DragonUI/tags)
 2. Extract the downloaded ZIP file
 3. Rename the extracted folder from `DragonUI-x.x.x` to `DragonUI`
 4. Move the `DragonUI` folder to `Interface\AddOns`
@@ -49,8 +49,11 @@ This project combines and adapts code from several sources:
 - **[s0h2x](https://github.com/s0h2x)** - Two specific addons: one for action bars and another for minimap, which have been merged and integrated into DragonUI
 - **[KarlHeinz_Schneider - Dragonflight UI (Classic)](https://www.curseforge.com/wow/addons/dragonflight-ui-classic)** - Original addon from which many elements have been taken and backported/adapted to 3.3.5a, including the micro menu and other features built from scratch based on this design
 - **[TheLinuxITGuy - Chromie-Dragonflight](https://github.com/TheLinuxITGuy/Chromie-Dragonflight)** - Used as reference for implementation approaches and some adapted code solutions
+- **[Raz0r1337 - RetailUI](https://github.com/Raz0r1337/RetailUI)** - Reference and inspiration for UI elements and implementation approaches
 
 ## Special Thanks
 
 - **CromieCraft Community** - For helping test and provide feedback on various addon features
 - **Teknishun** - Special thanks for extensive testing and valuable feedback
+- **Project Epoch Community and Staff** - For their help and feedback during development and testing
+

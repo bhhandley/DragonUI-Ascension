@@ -212,19 +212,78 @@ function MainMenuBarMixin:actionbar_setup()
 	MultiBarBottomRight:SetParent(pUiMainBar)
 	MultiBarBottomRight:EnableMouse(false)
 	MultiBarBottomRight:SetClearPoint('BOTTOMLEFT', MultiBarBottomLeftButton1, 'TOPLEFT', 0, 8)
-	MultiBarRight:SetClearPoint('TOPRIGHT', UIParent, 'RIGHT', -6, (Minimap:GetHeight() * 1.3))
+	-- MultiBarRight:SetClearPoint('TOPRIGHT', UIParent, 'RIGHT', -6, (Minimap:GetHeight() * 1.3))
 	MultiBarRight:SetScale(config.mainbars.scale_rightbar)
 	MultiBarLeft:SetScale(config.mainbars.scale_leftbar)
 
 	-- MultiBarLeft:SetParent(UIParent)
-	MultiBarLeft:SetClearPoint('TOPRIGHT', MultiBarRight, 'TOPLEFT', -7, 0)
+	-- MultiBarLeft:SetClearPoint('TOPRIGHT', MultiBarRight, 'TOPLEFT', -7, 0)
 end
 
-event:RegisterEvents(function()
-	MainMenuBarPageNumber:SetText(GetActionBarPage());
-end,
-	'ACTIONBAR_PAGE_CHANGED'
-);
+function addon.PositionActionBars()
+    if InCombatLockdown() then return end
+    
+    local db = addon.db and addon.db.profile and addon.db.profile.mainbars
+    if not db then return end
+
+    -- ✅ OBTENER LA ESCALA DE LA UI UNA SOLA VEZ
+    local scale = UIParent:GetEffectiveScale()
+
+    -- 1. Barra Principal (pUiMainBar)
+    if pUiMainBar then
+        pUiMainBar:SetMovable(true)
+        pUiMainBar:ClearAllPoints()
+        
+        if db.player.override then
+            -- MODO MANUAL: Posición guardada por el usuario.
+            -- ✅ CORRECCIÓN: Dividimos por la escala para convertir píxeles a puntos.
+            pUiMainBar:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", (db.player.x or 0) / scale, (db.player.y or 0) / scale)
+        else
+            -- MODO AUTOMÁTICO: Posicionamiento por defecto.
+            pUiMainBar:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, db.player.y_position_offset or 75)
+        end
+        pUiMainBar:SetUserPlaced(db.player.override)
+    end
+
+    -- 2. Barra Derecha (MultiBarRight)
+    if MultiBarRight then
+        MultiBarRight:SetMovable(true)
+        MultiBarRight:ClearAllPoints()
+
+        if db.right.override then
+            -- MODO MANUAL
+            -- ✅ CORRECCIÓN: Dividimos por la escala.
+            MultiBarRight:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", (db.right.x or 0) / scale, (db.right.y or 0) / scale)
+        else
+            -- MODO AUTOMÁTICO
+            MultiBarRight:SetPoint("RIGHT", UIParent, "RIGHT", -5, -70)
+        end
+        MultiBarRight:SetUserPlaced(db.right.override)
+    end
+
+    -- 3. Barra Izquierda (MultiBarLeft)
+    if MultiBarLeft then
+        MultiBarLeft:SetMovable(true)
+        MultiBarLeft:ClearAllPoints()
+
+        if db.left.override then
+            -- MODO MANUAL
+            -- ✅ CORRECCIÓN: Dividimos por la escala.
+            MultiBarLeft:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", (db.left.x or 0) / scale, (db.left.y or 0) / scale)
+        else
+            -- MODO AUTOMÁTICO: Anclada a la barra derecha si esta no ha sido movida.
+            if not db.right.override then
+                 MultiBarLeft:SetPoint("RIGHT", MultiBarRight, "LEFT", -5, 0)
+            else
+                -- Si la barra derecha fue movida, la izquierda se ancla a la pantalla para no quedar huérfana.
+                MultiBarLeft:SetPoint("RIGHT", MultiBarRight, "LEFT", -5, 0)
+            end
+        end
+        MultiBarLeft:SetUserPlaced(db.left.override)
+    end
+end
+
+
 
 function MainMenuBarMixin:statusbar_setup()
 	for _,bar in pairs({MainMenuExpBar,ReputationWatchStatusBar}) do
@@ -315,68 +374,30 @@ hooksecurefunc('ReputationWatchBar_Update',function()
 	end
 end)
 
--- position update method
-function pUiMainBar:actionbar_update()
-    -- cache configuration to avoid multiple accesses
-    local db_xprepbar = addon.db and addon.db.profile and addon.db.profile.xprepbar
-    if not db_xprepbar then return end
-    
-    local both = db_xprepbar.bothbar_offset;
-    local single = db_xprepbar.singlebar_offset;
-    local nobar	= db_xprepbar.nobar_offset;
-    
-    local xpbar = MainMenuExpBar:IsShown();
-    local repbar = ReputationWatchBar:IsShown();
-    
-    if not InCombatLockdown() and not UnitAffectingCombat('player') then
-        local yOffset
-        if xpbar and repbar then
-            yOffset = both
-        elseif xpbar or repbar then
-            yOffset = single
-        else
-            yOffset = nobar
-        end
-        self:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, yOffset);
-    end
-end
 
-event:RegisterEvents(function()
-	pUiMainBar:actionbar_update();
-end,
-	'PLAYER_LOGIN','ADDON_LOADED'
-);
 
--- set initial position when DragonUI is ready
-local function ForceInitialUpdate()
-	pUiMainBar:actionbar_update();
-end
 
-addon.core.RegisterMessage(addon, "DRAGONUI_READY", ForceInitialUpdate);
+
 
 local MainMenuExpBar = _G["MainMenuExpBar"]
 local ReputationWatchBar = _G["ReputationWatchBar"]
 
 for _,bar in pairs({MainMenuExpBar, ReputationWatchBar}) do
-	if bar then
-		bar:HookScript('OnShow',function()
-			if not InCombatLockdown() and not UnitAffectingCombat('player') then
-				pUiMainBar:actionbar_update();
-			end
-		end);
-		bar:HookScript('OnHide',function()
-			if not InCombatLockdown() and not UnitAffectingCombat('player') then
-				pUiMainBar:actionbar_update();
-			end
-		end);
-	end
+    if bar then
+        bar:HookScript('OnShow',function()
+            if not InCombatLockdown() and not (addon.EditorMode and addon.EditorMode:IsActive()) then
+                addon.PositionActionBars() -- ✅ Usar la nueva función
+            end
+        end);
+        bar:HookScript('OnHide',function()
+            if not InCombatLockdown() and not (addon.EditorMode and addon.EditorMode:IsActive()) then
+                addon.PositionActionBars() -- ✅ Usar la nueva función
+            end
+        end);
+    end
 end;
 
-function addon.RefreshXpRepBarPosition()
-	if pUiMainBar and pUiMainBar.actionbar_update then
-		pUiMainBar:actionbar_update()
-	end
-end
+
 
 function addon.RefreshRepBarPosition()
 	if ReputationWatchBar_Update then
@@ -418,7 +439,6 @@ MainMenuBarMixin:initialize();
 function addon.RefreshMainbars()
     if not pUiMainBar then return end
     
-    -- cache configuration to avoid multiple accesses
     local db = addon.db and addon.db.profile
     if not db then return end
     
@@ -426,13 +446,22 @@ function addon.RefreshMainbars()
     local db_style = db.style
     local db_buttons = db.buttons
     
-    -- update bar scales
+    -- ========================================
+    -- ✅ POSICIONAR BARRAS (NUEVO Y SIMPLIFICADO)
+    -- ========================================
+    addon.PositionActionBars()
+    
+    -- ========================================
+    -- ✅ RESTO DE CONFIGURACIONES (se mantiene igual)
+    -- ========================================
+    
+    -- Update scales
     pUiMainBar:SetScale(db_mainbars.scale_actionbar);
     if MultiBarLeft then MultiBarLeft:SetScale(db_mainbars.scale_leftbar); end
     if MultiBarRight then MultiBarRight:SetScale(db_mainbars.scale_rightbar); end
     if VehicleMenuBar then VehicleMenuBar:SetScale(db_mainbars.scale_vehicle); end
     
-    -- update page buttons visibility
+    -- Update page buttons
     if db_buttons.pages.show then
         ActionBarUpButton:Show()
         ActionBarDownButton:Show()
@@ -442,26 +471,95 @@ function addon.RefreshMainbars()
         ActionBarDownButton:Hide()
         MainMenuBarPageNumber:Hide()
     end
-
-    -- update main bar background
+    
+    -- Update backgrounds
     MainMenuBarMixin:update_main_bar_background()
-
-    -- update secondary bar positioning
     addon.RefreshUpperActionBarsPosition()
     
-    -- refresh button grids
+    -- Update grids and gryphons
     if addon.actionbuttons_grid then
         addon.actionbuttons_grid()
     end
-
-    -- update XP bar textures
+    UpdateGryphonStyle()
+    
+    -- Update XP bar textures
     if MainMenuExpBar then 
         MainMenuExpBar:SetStatusBarTexture(db_style.xpbar == 'old' and "Interface\\MainMenuBar\\UI-XP-Bar" or "Interface\\MainMenuBar\\UI-ExperienceBar")
     end
     if ReputationWatchStatusBar then 
         ReputationWatchStatusBar:SetStatusBarTexture(db_style.xpbar == 'old' and "Interface\\MainMenuBar\\UI-XP-Bar" or "Interface\\MainMenuBar\\UI-ExperienceBar")
     end
+end
+
+local function OnProfileChange()
+    -- Esta función se llamará cada vez que el perfil cambie, se resetee o se copie.
+    -- Llama directamente a la función de refresco principal.
+    if addon.RefreshMainbars then
+        addon.RefreshMainbars()
+       
+    end
+end
+
+local initializationFrame = CreateFrame("Frame")
+initializationFrame:RegisterEvent("PLAYER_LOGIN")
+initializationFrame:SetScript("OnEvent", function(self, event)
+    if event == "PLAYER_LOGIN" then
+        -- Nos aseguramos de que la base de datos (AceDB) esté lista.
+        if not addon.db then return end
+
+        -- Registramos nuestra función 'OnProfileChange' para que se ejecute automáticamente
+        -- cuando AceDB detecte un cambio de perfil.
+        addon.db.RegisterCallback(addon, "OnProfileChanged", OnProfileChange)
+        addon.db.RegisterCallback(addon, "OnProfileCopied", OnProfileChange)
+        addon.db.RegisterCallback(addon, "OnProfileReset", OnProfileChange)
+        
+        -- Forzamos un refresco inicial al entrar al juego para aplicar la configuración del perfil cargado.
+        OnProfileChange()
+
+        -- Ya no necesitamos escuchar este evento.
+        self:UnregisterEvent("PLAYER_LOGIN")
+    end
+end)
+
+-- ✅ FUNCIONES PÚBLICAS PARA DEBUGGING/MANUAL (se mantienen)
+function addon.TestProfileCallbacks()
+
+    if addon.db then
+   
+        if addon.db.GetCurrentProfile then
+       
+        end
+    end
+end
+
+function addon.ForceProfileRefresh()
+    OnProfileChange()
+end
+
+function addon.TestSecondaryBars()
+
+    local config = addon.db.profile.mainbars
+    if not config then
+       
+        return
+    end
     
-    -- update gryphon styling
-    UpdateGryphonStyle()
+       
+    if MultiBarLeft then
+        local point, _, _, x, y = MultiBarLeft:GetPoint()
+    
+    end
+    
+    if MultiBarRight then
+        local point, _, _, x, y = MultiBarRight:GetPoint()
+      
+    end
+    
+   
+    addon.PositionActionBars()
+end
+
+-- ✅ FUNCIÓN PARA FORZAR SOLO BARRAS SECUNDARIAS
+function addon.ForceSecondaryBarsPosition()
+    addon.PositionActionBars()
 end
