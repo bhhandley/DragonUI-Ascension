@@ -90,7 +90,7 @@ local GRACE_PERIOD_AFTER_SUCCESS = 0.15;
 -- =================================================================
 
 -- Estados por tipo de castbar (consolidado)
-local castbarStates = {
+addon.castbarStates = {
     player = {
         casting = false,
         isChanneling = false,
@@ -671,7 +671,7 @@ end
 -- Función unificada para actualizar texto de tiempo de cast
 local function UpdateCastTimeText(castbarType)
     local frameData = frames[castbarType];
-    local state = castbarStates[castbarType];
+    local state = addon.castbarStates[castbarType];
 
     -- CORREGIDO: Para player castbar, verificar timeValue y timeMax también
     if castbarType == "player" then
@@ -749,7 +749,7 @@ local function SyncWithBlizzardCastbar(castbarType, ourFrame)
     };
 
     local blizzardFrame = blizzardFrames[castbarType];
-    local state = castbarStates[castbarType];
+     local state = addon.castbarStates[castbarType];
 
     if not blizzardFrame or not ourFrame or not state then
         return false
@@ -793,7 +793,7 @@ end
 -- Función unificada para finalizar spells
 local function FinishSpell(castbarType)
     local frameData = frames[castbarType];
-    local state = castbarStates[castbarType];
+    local state = addon.castbarStates[castbarType];
     local cfg = addon.db.profile.castbar;
 
     if castbarType ~= "player" then
@@ -851,7 +851,7 @@ end
 
 -- Función unificada para manejar parada/interrupción de cast
 local function HandleCastStop(castbarType, event, isInterrupted)
-    local state = castbarStates[castbarType];
+    local state = addon.castbarStates[castbarType];
     local frameData = frames[castbarType];
     local cfg = addon.db.profile.castbar;
 
@@ -914,7 +914,7 @@ end
 
 -- Función de actualización principal unificada
 local function UpdateCastbar(castbarType, self, elapsed)
-    local state = castbarStates[castbarType];
+    local state = addon.castbarStates[castbarType];
     local frameData = frames[castbarType];
     local cfg = addon.db.profile.castbar;
 
@@ -1210,7 +1210,7 @@ local function HandleCastStart(castbarType, unit)
 
     RefreshCastbar(castbarType)
 
-    local state = castbarStates[castbarType];
+    local state = addon.castbarStates[castbarType];
     local frameData = frames[castbarType];
 
     state.casting = true;
@@ -1308,7 +1308,7 @@ local function HandleChannelStart(castbarType, unit)
 
     RefreshCastbar(castbarType)
 
-    local state = castbarStates[castbarType];
+     local state = addon.castbarStates[castbarType];
     local frameData = frames[castbarType];
 
     state.casting = true;
@@ -1420,7 +1420,7 @@ local function HandleCastingEvents(castbarType, event, unit, ...)
     elseif event == 'UNIT_SPELLCAST_SUCCEEDED' then
         -- Solo para player - marcar cast como exitoso
         if castbarType == "player" then
-            local state = castbarStates[castbarType];
+            local state = addon.castbarStates[castbarType];
             if state.casting or state.isChanneling then
                 state.castSucceeded = true;
             end
@@ -1431,7 +1431,7 @@ local function HandleCastingEvents(castbarType, event, unit, ...)
         HandleCastStop(castbarType, event, false);
     elseif event == 'UNIT_SPELLCAST_CHANNEL_STOP' then
         -- Para channels, verificar si fue interrumpido
-        local state = castbarStates[castbarType];
+        local state = addon.castbarStates[castbarType];
         local isInterrupted = false;
 
         -- Si el channel se detiene antes del 90% de completado, probablemente fue interrumpido
@@ -1448,14 +1448,19 @@ local function HandleCastingEvents(castbarType, event, unit, ...)
     end
 end
 
--- Función para manejar cambios de target
 local function HandleTargetChanged()
+    -- Si el modo editor está activo, no hacer nada.
+    -- Esto evita que la barra se oculte al entrar/salir del modo editor.
+    if addon.EditorMode and addon.EditorMode:IsActive() then
+        return;
+    end
+
     -- Ocultar inmediatamente castbar de Blizzard target
     HideBlizzardCastbar("target");
 
     -- Reset completo del estado del castbar target
     local frameData = frames.target;
-    local state = castbarStates.target;
+    local state = addon.castbarStates.target;
 
     if frameData.castbar then
         frameData.castbar:Hide();
@@ -1782,9 +1787,7 @@ RefreshCastbar = function(castbarType)
     end
 
     -- Manejar castbar de Blizzard primero
-    if cfg.enabled then
-        HideBlizzardCastbar(castbarType);
-    else
+    if not cfg.enabled then
         ShowBlizzardCastbar(castbarType);
         -- Ocultar nuestro castbar y salir
         local frameData = frames[castbarType];
@@ -1796,7 +1799,7 @@ RefreshCastbar = function(castbarType)
             if frameData.textBackground then
                 frameData.textBackground:Hide()
             end
-            local state = castbarStates[castbarType];
+            local state = addon.castbarStates[castbarType]; -- ✅ CORRECCIÓN: Usar la tabla del addon
             state.casting = false;
             state.holdTime = 0;
         end
@@ -1820,19 +1823,30 @@ RefreshCastbar = function(castbarType)
 
     -- Posicionar y dimensionar castbar principal
     frameData.castbar:ClearAllPoints();
-    
-    -- ✅ INICIO: LÓGICA DE ANCLAJE UNIFICADA Y CORREGIDA
-    -- Ahora TODAS las barras leen su configuración de anclaje.
-    local anchorFrameName = cfg.anchorFrame or "UIParent";
-    local anchorFrame = _G[anchorFrameName] or UIParent;
-    local anchorPoint = cfg.anchor or "BOTTOMLEFT";
-    local relativePoint = cfg.anchorParent or "BOTTOMLEFT";
-    local xPos = cfg.x_position or 0;
-    local yPos = cfg.y_position or 200;
+    local scale = UIParent:GetEffectiveScale()
 
-    frameData.castbar:SetPoint(anchorPoint, anchorFrame, relativePoint, xPos, yPos - auraOffset);
-    -- ✅ FIN: LÓGICA DE ANCLAJE UNIFICADA Y CORREGIDA
-    
+    if cfg.override then
+        -- MODO MANUAL: Posición guardada por el usuario (Editor Mode)
+        -- Convertimos las coordenadas absolutas guardadas a puntos de UI.
+        local x = (cfg.x_position or 0) / scale
+        local y = (cfg.y_position or 0) / scale
+        frameData.castbar:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", x, y);
+    else
+        -- MODO AUTOMÁTICO: Posicionamiento por defecto desde las opciones.
+        local anchorFrame = UIParent;
+        local anchorPoint = "CENTER";
+        local relativePoint = "BOTTOM";
+        local xPos = cfg.x_position or 0;
+        local yPos = cfg.y_position or 200;
+
+        if castbarType ~= "player" then
+            anchorFrame = _G[cfg.anchorFrame] or (castbarType == "target" and TargetFrame or FocusFrame) or UIParent;
+            anchorPoint = cfg.anchor or "CENTER";
+            relativePoint = cfg.anchorParent or "BOTTOM";
+        end
+        frameData.castbar:SetPoint(anchorPoint, anchorFrame, relativePoint, xPos, yPos - auraOffset);
+    end
+
     frameData.castbar:SetSize(cfg.sizeX or 200, cfg.sizeY or 16);
     frameData.castbar:SetScale(cfg.scale or 1);
     
@@ -1842,6 +1856,13 @@ RefreshCastbar = function(castbarType)
         frameData.textBackground:SetPoint('TOP', frameData.castbar, 'BOTTOM', 0, castbarType == "player" and 6 or 8);
         frameData.textBackground:SetSize(cfg.sizeX or 200, castbarType == "player" and 22 or 20);
         frameData.textBackground:SetScale(cfg.scale or 1);
+    end
+
+     -- ✅ CORRECCIÓN REFORZADA: Forzar visibilidad de la barra y sus fondos en modo editor
+    if addon.EditorMode and addon.EditorMode:IsActive() then
+        if frameData.castbar then frameData.castbar:Show() end
+        if frameData.background and frameData.background ~= frameData.textBackground then frameData.background:Show() end
+        if frameData.textBackground then frameData.textBackground:Show() end
     end
 
     -- Posicionar frame de fondo adicional
@@ -2022,85 +2043,6 @@ end
 -- =================================================================
 -- FUNCIONES PÚBLICAS PARA EL ADDON
 -- =================================================================
-
--- ✅ INICIO: FUNCIÓN PARA OCULTAR CASTBAR DEL MODO EDITOR
-function addon.HideEditorCastbar(castbarType)
-    local unit = (castbarType == "player") and "player" or castbarType
-    
-    -- Si hay un casteo real en curso, no hacemos nada y dejamos que el sistema normal funcione.
-    if UnitCastingInfo(unit) or UnitChannelInfo(unit) then
-        -- Solo nos aseguramos de que la barra esté en su posición correcta.
-        if addon["Refresh" .. castbarType:sub(1,1):upper() .. castbarType:sub(2) .. "Castbar"] then
-            addon["Refresh" .. castbarType:sub(1,1):upper() .. castbarType:sub(2) .. "Castbar"]()
-        end
-        return
-    end
-
-    -- Si no hay casteo, ocultamos la barra de muestra.
-    local frameData = frames[castbarType]
-    if not frameData or not frameData.castbar then return end
-
-    frameData.castbar:Hide()
-    if frameData.textBackground then frameData.textBackground:Hide() end
-    if frameData.background and frameData.background ~= frameData.textBackground then
-        frameData.background:Hide()
-    end
-    
-    -- Reseteamos el estado para evitar problemas.
-    local state = castbarStates[castbarType]
-    if state then
-        state.casting = false
-        state.isChanneling = false
-        state.holdTime = 0
-    end
-end
--- ✅ FIN: FUNCIÓN PARA OCULTAR CASTBAR DEL MODO EDITOR
-
--- INICIO: FUNCIÓN PARA MOSTRAR CASTBAR EN MODO EDITOR
--- Esta función especial fuerza la visibilidad de una castbar para el modo editor.
-function addon.ShowEditorCastbar(castbarType)
-    local cfg = addon.db.profile.castbar
-    if castbarType ~= "player" then
-        cfg = cfg[castbarType]
-    end
-
-    if not cfg or not cfg.enabled then return end
-
-    -- Asegurarse de que la barra exista
-    if not frames[castbarType] or not frames[castbarType].castbar then
-        CreateCastbar(castbarType)
-    end
-
-    local frameData = frames[castbarType]
-    if not frameData or not frameData.castbar then return end
-
-    -- Forzar el refresco para asegurar que la posición y escala son correctas
-    RefreshCastbar(castbarType)
-
-    -- Mostrar los componentes básicos
-    frameData.castbar:Show()
-    if frameData.textBackground then frameData.textBackground:Show() end
-    if frameData.background and frameData.background ~= frameData.textBackground then
-        frameData.background:Show()
-    end
-
-    -- Poner un texto de ejemplo
-    SetCastText(castbarType, castbarType:sub(1,1):upper() .. castbarType:sub(2) .. " Castbar")
-    
-    -- Poner la barra a un 75% para que sea visible
-    frameData.castbar:SetMinMaxValues(0, 100)
-    frameData.castbar:SetValue(75)
-    frameData.castbar:SetStatusBarTexture(TEXTURES.standard)
-    frameData.castbar:SetStatusBarColor(1, 0.7, 0, 1)
-    ForceStatusBarTextureLayer(frameData.castbar)
-
-    -- Ocultar elementos dinámicos que no necesitamos en el editor
-    if frameData.spark then frameData.spark:Hide() end
-    if frameData.flash then frameData.flash:Hide() end
-    if frameData.shield then frameData.shield:Hide() end
-    HideAllChannelTicks(frameData.ticks, 15)
-end
--- ✅ FIN: FUNCIÓN PARA MOSTRAR CASTBAR EN MODO EDITOR
 
 -- Función pública para refresh de castbar del player
 function addon.RefreshCastbar()

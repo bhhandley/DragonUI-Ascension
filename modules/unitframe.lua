@@ -6101,18 +6101,18 @@ function unitframe:UpdatePartyState(state)
     -- Determinar los valores a usar basados en el override.
     local anchor, parent, anchorPoint, x, y
     if partyConfig.override then
-        -- Si override está activo, usamos los valores guardados.
-        anchor = partyConfig.anchor or 'BOTTOMLEFT'
-        parent = _G[partyConfig.anchorParent] or UIParent
-        anchorPoint = partyConfig.anchorPoint or 'BOTTOMLEFT'
-        x = partyConfig.x or 10
-        y = partyConfig.y or -100
+        anchor = partyConfig.anchor or "BOTTOMLEFT"
+        -- Usamos _G para obtener el frame por su nombre, con fallback a UIParent
+        parent = _G[partyConfig.anchorParent or "UIParent"] or UIParent
+        anchorPoint = partyConfig.anchorPoint or "BOTTOMLEFT"
+        x = partyConfig.x or 0
+        y = partyConfig.y or 0
     else
-        -- Si no, usamos los valores por defecto del addon.
-        anchor = 'TOPLEFT'
+        -- Valores por defecto si no hay override (posición inicial)
+        anchor = "TOPLEFT"
         parent = UIParent
-        anchorPoint = 'TOPLEFT'
-        x = 10
+        anchorPoint = "TOPLEFT"
+        x = 20
         y = -120
     end
 

@@ -1296,17 +1296,15 @@ function addon:CreateOptionsTable()
                         type = 'range',
                         name = "Auras Horizontal Offset",
                         desc = "Adjusts the horizontal position of the buffs/debuffs block next to the minimap.",
-                        min = -200, -- More space to the left
-                        max = -10, -- Closer to the minimap
+                        min = -500, -- More space to the left
+                        max = 500, -- ✅ Aumentado para más flexibilidad
                         step = 1,
                         get = function()
-                            -- Ensure the 'auras' table exists to prevent errors
+                            -- ✅ CORRECCIÓN: Inicializar la tabla completa si no existe
                             if not addon.db.profile.map.auras then
-                                addon.db.profile.map.auras = {
-                                    x_offset = -80
-                                } -- Fallback default
+                                addon.db.profile.map.auras = { x_offset = -70, y_offset = 23 }
                             end
-                            return addon.db.profile.map.auras.x_offset
+                            return addon.db.profile.map.auras.x_offset or -70
                         end,
                         set = createInstantSetFunction("map", "auras", "x_offset", "RefreshAuraPosition"),
                         order = 10.2
@@ -1315,17 +1313,15 @@ function addon:CreateOptionsTable()
                         type = 'range',
                         name = "Auras Vertical Offset",
                         desc = "Adjusts the vertical position of the buffs/debuffs block next to the minimap.",
-                        min = -100, -- More down
-                        max = 100, -- More up
+                        min = -500, -- ✅ Aumentado para más flexibilidad
+                        max = 500, -- ✅ Aumentado para más flexibilidad
                         step = 1,
                         get = function()
-                            -- Ensure the 'auras' table exists to prevent errors
+                            -- ✅ CORRECCIÓN: Inicializar la tabla completa si no existe
                             if not addon.db.profile.map.auras then
-                                addon.db.profile.map.auras = {
-                                    y_offset = 0
-                                } -- Fallback default
+                                addon.db.profile.map.auras = { x_offset = -70, y_offset = 23 }
                             end
-                            return addon.db.profile.map.auras.y_offset
+                            return addon.db.profile.map.auras.y_offset or 23
                         end,
                         set = createInstantSetFunction("map", "auras", "y_offset", "RefreshAuraPosition"),
                         order = 10.3
