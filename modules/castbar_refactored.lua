@@ -1820,19 +1820,19 @@ RefreshCastbar = function(castbarType)
 
     -- Posicionar y dimensionar castbar principal
     frameData.castbar:ClearAllPoints();
-    local anchorFrame = UIParent;
-    local anchorPoint = "CENTER";
-    local relativePoint = "BOTTOM";
+    
+    -- ✅ INICIO: LÓGICA DE ANCLAJE UNIFICADA Y CORREGIDA
+    -- Ahora TODAS las barras leen su configuración de anclaje.
+    local anchorFrameName = cfg.anchorFrame or "UIParent";
+    local anchorFrame = _G[anchorFrameName] or UIParent;
+    local anchorPoint = cfg.anchor or "BOTTOMLEFT";
+    local relativePoint = cfg.anchorParent or "BOTTOMLEFT";
     local xPos = cfg.x_position or 0;
     local yPos = cfg.y_position or 200;
 
-    if castbarType ~= "player" then
-        anchorFrame = _G[cfg.anchorFrame] or (castbarType == "target" and TargetFrame or FocusFrame) or UIParent;
-        anchorPoint = cfg.anchor or "CENTER";
-        relativePoint = cfg.anchorParent or "BOTTOM";
-    end
-
     frameData.castbar:SetPoint(anchorPoint, anchorFrame, relativePoint, xPos, yPos - auraOffset);
+    -- ✅ FIN: LÓGICA DE ANCLAJE UNIFICADA Y CORREGIDA
+    
     frameData.castbar:SetSize(cfg.sizeX or 200, cfg.sizeY or 16);
     frameData.castbar:SetScale(cfg.scale or 1);
     
@@ -2022,6 +2022,85 @@ end
 -- =================================================================
 -- FUNCIONES PÚBLICAS PARA EL ADDON
 -- =================================================================
+
+-- ✅ INICIO: FUNCIÓN PARA OCULTAR CASTBAR DEL MODO EDITOR
+function addon.HideEditorCastbar(castbarType)
+    local unit = (castbarType == "player") and "player" or castbarType
+    
+    -- Si hay un casteo real en curso, no hacemos nada y dejamos que el sistema normal funcione.
+    if UnitCastingInfo(unit) or UnitChannelInfo(unit) then
+        -- Solo nos aseguramos de que la barra esté en su posición correcta.
+        if addon["Refresh" .. castbarType:sub(1,1):upper() .. castbarType:sub(2) .. "Castbar"] then
+            addon["Refresh" .. castbarType:sub(1,1):upper() .. castbarType:sub(2) .. "Castbar"]()
+        end
+        return
+    end
+
+    -- Si no hay casteo, ocultamos la barra de muestra.
+    local frameData = frames[castbarType]
+    if not frameData or not frameData.castbar then return end
+
+    frameData.castbar:Hide()
+    if frameData.textBackground then frameData.textBackground:Hide() end
+    if frameData.background and frameData.background ~= frameData.textBackground then
+        frameData.background:Hide()
+    end
+    
+    -- Reseteamos el estado para evitar problemas.
+    local state = castbarStates[castbarType]
+    if state then
+        state.casting = false
+        state.isChanneling = false
+        state.holdTime = 0
+    end
+end
+-- ✅ FIN: FUNCIÓN PARA OCULTAR CASTBAR DEL MODO EDITOR
+
+-- INICIO: FUNCIÓN PARA MOSTRAR CASTBAR EN MODO EDITOR
+-- Esta función especial fuerza la visibilidad de una castbar para el modo editor.
+function addon.ShowEditorCastbar(castbarType)
+    local cfg = addon.db.profile.castbar
+    if castbarType ~= "player" then
+        cfg = cfg[castbarType]
+    end
+
+    if not cfg or not cfg.enabled then return end
+
+    -- Asegurarse de que la barra exista
+    if not frames[castbarType] or not frames[castbarType].castbar then
+        CreateCastbar(castbarType)
+    end
+
+    local frameData = frames[castbarType]
+    if not frameData or not frameData.castbar then return end
+
+    -- Forzar el refresco para asegurar que la posición y escala son correctas
+    RefreshCastbar(castbarType)
+
+    -- Mostrar los componentes básicos
+    frameData.castbar:Show()
+    if frameData.textBackground then frameData.textBackground:Show() end
+    if frameData.background and frameData.background ~= frameData.textBackground then
+        frameData.background:Show()
+    end
+
+    -- Poner un texto de ejemplo
+    SetCastText(castbarType, castbarType:sub(1,1):upper() .. castbarType:sub(2) .. " Castbar")
+    
+    -- Poner la barra a un 75% para que sea visible
+    frameData.castbar:SetMinMaxValues(0, 100)
+    frameData.castbar:SetValue(75)
+    frameData.castbar:SetStatusBarTexture(TEXTURES.standard)
+    frameData.castbar:SetStatusBarColor(1, 0.7, 0, 1)
+    ForceStatusBarTextureLayer(frameData.castbar)
+
+    -- Ocultar elementos dinámicos que no necesitamos en el editor
+    if frameData.spark then frameData.spark:Hide() end
+    if frameData.flash then frameData.flash:Hide() end
+    if frameData.shield then frameData.shield:Hide() end
+    HideAllChannelTicks(frameData.ticks, 15)
+end
+-- ✅ FIN: FUNCIÓN PARA MOSTRAR CASTBAR EN MODO EDITOR
 
 -- Función pública para refresh de castbar del player
 function addon.RefreshCastbar()

@@ -129,10 +129,31 @@ end
 
 -- Mapeo de módulos a sus configuraciones en la base de datos
 local moduleConfig = {
-    -- Castbars
-    ["DragonUIPlayerCastbar"] = { dbPath = {"castbar"}, xKey = "x_position", yKey = "y_position", refreshFunc = "RefreshCastbar", displayName = "Player Castbar" },
-    ["DragonUITargetCastbar"] = { dbPath = {"castbar", "target"}, xKey = "x_position", yKey = "y_position", refreshFunc = "RefreshTargetCastbar", displayName = "Target Castbar" },
-    ["DragonUIFocusCastbar"] = { dbPath = {"castbar", "focus"}, xKey = "x_position", yKey = "y_position", refreshFunc = "RefreshFocusCastbar", displayName = "Focus Castbar" },
+    -- Castbars - AÑADIMOS LAS BARRAS DE CASTEO AL EDITOR
+    ["DragonUIPlayerCastbar"] = { 
+        dbPath = {"castbar"}, 
+        xKey = "x_position", 
+        yKey = "y_position", 
+        refreshFunc = "RefreshCastbar", 
+        displayName = "Player Castbar",
+        castbar = true -- ✅ AÑADIMOS UN FLAG PARA IDENTIFICARLAS
+    },
+    ["DragonUITargetCastbar"] = { 
+        dbPath = {"castbar", "target"}, 
+        xKey = "x_position", 
+        yKey = "y_position", 
+        refreshFunc = "RefreshTargetCastbar", 
+        displayName = "Target Castbar",
+        castbar = true -- ✅ AÑADIMOS UN FLAG PARA IDENTIFICARLAS
+    },
+    ["DragonUIFocusCastbar"] = { 
+        dbPath = {"castbar", "focus"}, 
+        xKey = "x_position", 
+        yKey = "y_position", 
+        refreshFunc = "RefreshFocusCastbar", 
+        displayName = "Focus Castbar",
+        castbar = true -- ✅ AÑADIMOS UN FLAG PARA IDENTIFICARLAS
+    },
 
     -- Unit Frames
     ["PlayerFrame"] = { dbPath = {"unitframe", "player"}, xKey = "x", yKey = "y", refreshFunc = "RefreshUnitFrames", displayName = "Player Frame", unitframe = true },
@@ -271,21 +292,24 @@ local function makeFrameMovable(frame, config)
             
            
             
-            if addon.RefreshUnitFrames then
+           if addon.RefreshUnitFrames then
                 addon:RefreshUnitFrames()
             end
 
-        else
+         else
             -- === LÓGICA GENÉRICA PARA TODOS LOS DEMÁS FRAMES ===
             local x, y
-            if config.unitframe then
-                -- Para UnitFrames, usamos coordenadas absolutas y activamos override
-                -- ✅ CORRECCIÓN: Obtenemos las coordenadas directas sin la escala, igual que con el party frame.
+            -- ✅ INICIO: LÓGICA DE GUARDADO UNIFICADA PARA CASTBARS Y UNITFRAMES
+            if config.castbar or config.unitframe then
+                -- Para Castbars y UnitFrames, usamos coordenadas absolutas y guardamos la configuración de anclaje.
                 x, y = frame:GetLeft(), frame:GetBottom()
-                setDbValue(config.dbPath, "override", true)
+                
+                -- Guardamos la información completa para anclar a la pantalla.
+                setDbValue(config.dbPath, "override", true) -- Necesario para algunos unitframes
                 setDbValue(config.dbPath, "anchor", "BOTTOMLEFT")
-                setDbValue(config.dbPath, "anchorParent", "UIParent")
-                setDbValue(config.dbPath, "anchorPoint", "BOTTOMLEFT")
+                setDbValue(config.dbPath, "anchorParent", "BOTTOMLEFT")
+                setDbValue(config.dbPath, "anchorFrame", "UIParent")
+            -- FIN: LÓGICA DE GUARDADO UNIFICADA
             else
                 -- Para el resto (Stance, Pet, etc.), usamos offsets del punto de anclaje
                 local _, _, _, xOfs, yOfs = frame:GetPoint()
@@ -335,7 +359,16 @@ function EditorMode:Show()
     if MultiBarLeft then MultiBarLeft:Show(); end
     if MultiBarRight then MultiBarRight:Show(); end
 
-    -- ✅ Lógica para los Party Frames (CORREGIDO)
+    --  INICIO: LÓGICA PARA MOSTRAR CASTBARS EN MODO EDITOR
+    -- Forzamos la visibilidad de las castbars para poder moverlas.
+    if addon.ShowEditorCastbar then
+        addon.ShowEditorCastbar("player")
+        addon.ShowEditorCastbar("target")
+        addon.ShowEditorCastbar("focus")
+    end
+    --  FIN: LÓGICA PARA MOSTRAR CASTBARS
+
+    --  Lógica para los Party Frames (CORREGIDO)
     if GetNumPartyMembers() == 0 then
         -- No estamos en grupo, mostrar frames falsos
         if addon.unitframe and addon.unitframe.ForceInitPartyFrames then
@@ -387,7 +420,16 @@ function EditorMode:Hide()
     if addon.PositionActionBars then addon.PositionActionBars(); end
     if addon.RefreshUnitFrames then addon.RefreshUnitFrames(); end
     
-    -- ✅ Restaurar visibilidad normal de TODOS los frames
+--  INICIO: RESTAURAR ESTADO NORMAL DE CASTBARS (CORREGIDO)
+    -- Llamamos a la nueva función de limpieza para ocultar las barras de muestra.
+    if addon.HideEditorCastbar then
+        addon.HideEditorCastbar("player")
+        addon.HideEditorCastbar("target")
+        addon.HideEditorCastbar("focus")
+    end
+    -- FIN: RESTAURAR ESTADO NORMAL
+
+    --  Restaurar visibilidad normal de TODOS los frames
     if TargetFrame and not UnitExists("target") then TargetFrame:Hide(); end
     if FocusFrame and not UnitExists("focus") then FocusFrame:Hide(); end
     if PetFrame and not UnitExists("pet") then PetFrame:Hide(); end

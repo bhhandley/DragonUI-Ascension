@@ -1888,6 +1888,7 @@ function addon:CreateOptionsTable()
                                 end,
                                 order = 10,
                                 disabled = function()
+                                    -- ✅ CORRECCIÓN LÓGICA: Deshabilitar si el modo es "simple"
                                     return (addon.db.profile.castbar.target and
                                                addon.db.profile.castbar.target.text_mode) == "simple"
                                 end
@@ -1911,6 +1912,7 @@ function addon:CreateOptionsTable()
                                 end,
                                 order = 11,
                                 disabled = function()
+                                    -- ✅ CORRECCIÓN LÓGICA: Deshabilitar si el modo es "simple"
                                     return (addon.db.profile.castbar.target and
                                                addon.db.profile.castbar.target.text_mode) == "simple"
                                 end
@@ -1996,6 +1998,8 @@ function addon:CreateOptionsTable()
                         }
                     },
 
+
+
                     focus_castbar = {
                         type = 'group',
                         name = "Focus Castbar",
@@ -2005,303 +2009,126 @@ function addon:CreateOptionsTable()
                                 type = 'toggle',
                                 name = "Enable Focus Castbar",
                                 desc = "Enable or disable the focus castbar",
-                                get = function()
-                                    if not addon.db.profile.castbar.focus then
-                                        return true
-                                    end
-                                    local value = addon.db.profile.castbar.focus.enabled
-                                    if value == nil then
-                                        return true
-                                    end
-                                    return value == true
-                                end,
-                                set = function(info, val)
-                                    if not addon.db.profile.castbar.focus then
-                                        addon.db.profile.castbar.focus = {}
-                                    end
-                                    addon.db.profile.castbar.focus.enabled = val
-                                    addon.RefreshFocusCastbar()
-                                end,
+                                get = function() return addon.db.profile.castbar.focus.enabled end,
+                                set = createInstantSetFunction("castbar", "focus", "enabled", "RefreshFocusCastbar"),
                                 order = 1
                             },
                             x_position = {
                                 type = 'range',
                                 name = "X Position",
                                 desc = "Horizontal position relative to anchor point",
-                                min = -500,
-                                max = 500,
-                                step = 1,
-                                get = function()
-                                    return
-                                        addon.db.profile.castbar.focus and addon.db.profile.castbar.focus.x_position or
-                                            -20
-                                end,
-                                set = function(info, val)
-                                    if not addon.db.profile.castbar.focus then
-                                        addon.db.profile.castbar.focus = {}
-                                    end
-                                    addon.db.profile.castbar.focus.x_position = val
-                                    addon.RefreshFocusCastbar()
-                                end,
+                                min = -1500, max = 1500, step = 1,
+                                get = function() return addon.db.profile.castbar.focus.x_position or 0 end,
+                                set = createInstantSetFunction("castbar", "focus", "x_position", "RefreshFocusCastbar"),
                                 order = 2
                             },
                             y_position = {
                                 type = 'range',
                                 name = "Y Position",
                                 desc = "Vertical position relative to anchor point",
-                                min = -500,
-                                max = 500,
-                                step = 1,
-                                get = function()
-                                    return
-                                        addon.db.profile.castbar.focus and addon.db.profile.castbar.focus.y_position or
-                                            -20
-                                end,
-                                set = function(info, val)
-                                    if not addon.db.profile.castbar.focus then
-                                        addon.db.profile.castbar.focus = {}
-                                    end
-                                    addon.db.profile.castbar.focus.y_position = val
-                                    addon.RefreshFocusCastbar()
-                                end,
+                                min = -1500, max = 1500, step = 1,
+                                get = function() return addon.db.profile.castbar.focus.y_position or 0 end,
+                                set = createInstantSetFunction("castbar", "focus", "y_position", "RefreshFocusCastbar"),
                                 order = 3
                             },
                             sizeX = {
                                 type = 'range',
                                 name = "Width",
                                 desc = "Width of the focus castbar",
-                                min = 50,
-                                max = 400,
-                                step = 1,
-                                get = function()
-                                    return addon.db.profile.castbar.focus and addon.db.profile.castbar.focus.sizeX or
-                                               150
-                                end,
-                                set = function(info, val)
-                                    if not addon.db.profile.castbar.focus then
-                                        addon.db.profile.castbar.focus = {}
-                                    end
-                                    addon.db.profile.castbar.focus.sizeX = val
-                                    addon.RefreshFocusCastbar()
-                                end,
+                                min = 50, max = 400, step = 1,
+                                get = function() return addon.db.profile.castbar.focus.sizeX or 200 end,
+                                set = createInstantSetFunction("castbar", "focus", "sizeX", "RefreshFocusCastbar"),
                                 order = 4
                             },
                             sizeY = {
                                 type = 'range',
                                 name = "Height",
                                 desc = "Height of the focus castbar",
-                                min = 5,
-                                max = 50,
-                                step = 1,
-                                get = function()
-                                    return addon.db.profile.castbar.focus and addon.db.profile.castbar.focus.sizeY or 10
-                                end,
-                                set = function(info, val)
-                                    if not addon.db.profile.castbar.focus then
-                                        addon.db.profile.castbar.focus = {}
-                                    end
-                                    addon.db.profile.castbar.focus.sizeY = val
-                                    addon.RefreshFocusCastbar()
-                                end,
+                                min = 5, max = 50, step = 1,
+                                get = function() return addon.db.profile.castbar.focus.sizeY or 16 end,
+                                set = createInstantSetFunction("castbar", "focus", "sizeY", "RefreshFocusCastbar"),
                                 order = 5
                             },
                             scale = {
                                 type = 'range',
                                 name = "Scale",
                                 desc = "Scale of the focus castbar",
-                                min = 0.5,
-                                max = 2.0,
-                                step = 0.1,
-                                get = function()
-                                    return addon.db.profile.castbar.focus and addon.db.profile.castbar.focus.scale or 1
-                                end,
-                                set = function(info, val)
-                                    if not addon.db.profile.castbar.focus then
-                                        addon.db.profile.castbar.focus = {}
-                                    end
-                                    addon.db.profile.castbar.focus.scale = val
-                                    addon.RefreshFocusCastbar()
-                                end,
+                                min = 0.5, max = 2.0, step = 0.1,
+                                get = function() return addon.db.profile.castbar.focus.scale or 1 end,
+                                set = createInstantSetFunction("castbar", "focus", "scale", "RefreshFocusCastbar"),
                                 order = 6
                             },
                             showIcon = {
                                 type = 'toggle',
                                 name = "Show Icon",
                                 desc = "Show the spell icon next to the focus castbar",
-                                get = function()
-                                    if not addon.db.profile.castbar.focus then
-                                        return true
-                                    end
-                                    local value = addon.db.profile.castbar.focus.showIcon
-                                    if value == nil then
-                                        return true
-                                    end
-                                    return value == true
-                                end,
-                                set = function(info, val)
-                                    if not addon.db.profile.castbar.focus then
-                                        addon.db.profile.castbar.focus = {}
-                                    end
-                                    addon.db.profile.castbar.focus.showIcon = val
-                                    addon.RefreshFocusCastbar()
-                                end,
+                                get = function() return addon.db.profile.castbar.focus.showIcon end,
+                                set = createInstantSetFunction("castbar", "focus", "showIcon", "RefreshFocusCastbar"),
                                 order = 7
                             },
                             sizeIcon = {
                                 type = 'range',
                                 name = "Icon Size",
                                 desc = "Size of the spell icon",
-                                min = 10,
-                                max = 50,
-                                step = 1,
-                                get = function()
-                                    return addon.db.profile.castbar.focus and addon.db.profile.castbar.focus.sizeIcon or
-                                               20
-                                end,
-                                set = function(info, val)
-                                    if not addon.db.profile.castbar.focus then
-                                        addon.db.profile.castbar.focus = {}
-                                    end
-                                    addon.db.profile.castbar.focus.sizeIcon = val
-                                    addon.RefreshFocusCastbar()
-                                end,
+                                min = 10, max = 50, step = 1,
+                                get = function() return addon.db.profile.castbar.focus.sizeIcon or 20 end,
+                                set = createInstantSetFunction("castbar", "focus", "sizeIcon", "RefreshFocusCastbar"),
                                 order = 8,
-                                disabled = function()
-                                    return not (addon.db.profile.castbar.focus and
-                                               addon.db.profile.castbar.focus.showIcon)
-                                end
+                                disabled = function() return not addon.db.profile.castbar.focus.showIcon end
                             },
                             text_mode = {
                                 type = 'select',
                                 name = "Text Mode",
                                 desc = "Choose how to display spell text: Simple (centered spell name only) or Detailed (spell name + time)",
-                                values = {
-                                    simple = "Simple (Centered Name Only)",
-                                    detailed = "Detailed (Name + Time)"
-                                },
-                                get = function()
-                                    return
-                                        (addon.db.profile.castbar.focus and addon.db.profile.castbar.focus.text_mode) or
-                                            "simple"
-                                end,
-                                set = function(info, val)
-                                    if not addon.db.profile.castbar.focus then
-                                        addon.db.profile.castbar.focus = {}
-                                    end
-                                    addon.db.profile.castbar.focus.text_mode = val
-                                    addon.RefreshFocusCastbar()
-                                end,
+                                values = { simple = "Simple", detailed = "Detailed" },
+                                get = function() return addon.db.profile.castbar.focus.text_mode or "detailed" end,
+                                set = createInstantSetFunction("castbar", "focus", "text_mode", "RefreshFocusCastbar"),
                                 order = 9
                             },
                             precision_time = {
                                 type = 'range',
                                 name = "Time Precision",
                                 desc = "Decimal places for remaining time",
-                                min = 0,
-                                max = 3,
-                                step = 1,
-                                get = function()
-                                    return (addon.db.profile.castbar.focus and
-                                               addon.db.profile.castbar.focus.precision_time) or 1
-                                end,
-                                set = function(info, val)
-                                    if not addon.db.profile.castbar.focus then
-                                        addon.db.profile.castbar.focus = {}
-                                    end
-                                    addon.db.profile.castbar.focus.precision_time = val
-                                end,
+                                min = 0, max = 3, step = 1,
+                                get = function() return addon.db.profile.castbar.focus.precision_time or 1 end,
+                                set = function(info, val) addon.db.profile.castbar.focus.precision_time = val end,
                                 order = 10,
-                                disabled = function()
-                                    return
-                                        (addon.db.profile.castbar.focus and addon.db.profile.castbar.focus.text_mode) ==
-                                            "simple"
-                                end
+                                disabled = function() return addon.db.profile.castbar.focus.text_mode == "simple" end
                             },
                             precision_max = {
                                 type = 'range',
                                 name = "Max Time Precision",
                                 desc = "Decimal places for total time",
-                                min = 0,
-                                max = 3,
-                                step = 1,
-                                get = function()
-                                    return (addon.db.profile.castbar.focus and
-                                               addon.db.profile.castbar.focus.precision_max) or 1
-                                end,
-                                set = function(info, val)
-                                    if not addon.db.profile.castbar.focus then
-                                        addon.db.profile.castbar.focus = {}
-                                    end
-                                    addon.db.profile.castbar.focus.precision_max = val
-                                end,
+                                min = 0, max = 3, step = 1,
+                                get = function() return addon.db.profile.castbar.focus.precision_max or 1 end,
+                                set = function(info, val) addon.db.profile.castbar.focus.precision_max = val end,
                                 order = 11,
-                                disabled = function()
-                                    return
-                                        (addon.db.profile.castbar.focus and addon.db.profile.castbar.focus.text_mode) ==
-                                            "simple"
-                                end
+                                disabled = function() return addon.db.profile.castbar.focus.text_mode == "simple" end
                             },
                             autoAdjust = {
                                 type = 'toggle',
                                 name = "Auto Adjust for Auras",
                                 desc = "Automatically adjust position based on focus auras",
-                                get = function()
-                                    if not addon.db.profile.castbar.focus then
-                                        return false
-                                    end
-                                    local value = addon.db.profile.castbar.focus.autoAdjust
-                                    if value == nil then
-                                        return false
-                                    end
-                                    return value == true
-                                end,
-                                set = function(info, val)
-                                    if not addon.db.profile.castbar.focus then
-                                        addon.db.profile.castbar.focus = {}
-                                    end
-                                    addon.db.profile.castbar.focus.autoAdjust = val
-                                    addon.RefreshFocusCastbar()
-                                end,
+                                get = function() return addon.db.profile.castbar.focus.autoAdjust end,
+                                set = createInstantSetFunction("castbar", "focus", "autoAdjust", "RefreshFocusCastbar"),
                                 order = 12
                             },
                             holdTime = {
                                 type = 'range',
                                 name = "Hold Time (Success)",
                                 desc = "Time to show the castbar after successful cast completion",
-                                min = 0,
-                                max = 3.0,
-                                step = 0.1,
-                                get = function()
-                                    return addon.db.profile.castbar.focus and addon.db.profile.castbar.focus.holdTime or
-                                               0.3
-                                end,
-                                set = function(info, val)
-                                    if not addon.db.profile.castbar.focus then
-                                        addon.db.profile.castbar.focus = {}
-                                    end
-                                    addon.db.profile.castbar.focus.holdTime = val
-                                    addon.RefreshFocusCastbar()
-                                end,
+                                min = 0, max = 3.0, step = 0.1,
+                                get = function() return addon.db.profile.castbar.focus.holdTime or 0.3 end,
+                                set = createInstantSetFunction("castbar", "focus", "holdTime", "RefreshFocusCastbar"),
                                 order = 13
                             },
                             holdTimeInterrupt = {
                                 type = 'range',
                                 name = "Hold Time (Interrupt)",
                                 desc = "Time to show the castbar after cast interruption",
-                                min = 0,
-                                max = 3.0,
-                                step = 0.1,
-                                get = function()
-                                    return addon.db.profile.castbar.focus and
-                                               addon.db.profile.castbar.focus.holdTimeInterrupt or 0.8
-                                end,
-                                set = function(info, val)
-                                    if not addon.db.profile.castbar.focus then
-                                        addon.db.profile.castbar.focus = {}
-                                    end
-                                    addon.db.profile.castbar.focus.holdTimeInterrupt = val
-                                    addon.RefreshFocusCastbar()
-                                end,
+                                min = 0, max = 3.0, step = 0.1,
+                                get = function() return addon.db.profile.castbar.focus.holdTimeInterrupt or 0.8 end,
+                                set = createInstantSetFunction("castbar", "focus", "holdTimeInterrupt", "RefreshFocusCastbar"),
                                 order = 14
                             },
                             reset_position = {
@@ -2309,11 +2136,9 @@ function addon:CreateOptionsTable()
                                 name = "Reset Position",
                                 desc = "Reset focus castbar position to default",
                                 func = function()
-                                    if not addon.db.profile.castbar.focus then
-                                        addon.db.profile.castbar.focus = {}
-                                    end
-                                    addon.db.profile.castbar.focus.x_position = -20
-                                    addon.db.profile.castbar.focus.y_position = -20
+                                    local defaults = addon.defaults.profile.castbar.focus
+                                    addon.db.profile.castbar.focus.x_position = defaults.x_position
+                                    addon.db.profile.castbar.focus.y_position = defaults.y_position
                                     addon.RefreshFocusCastbar()
                                 end,
                                 order = 15
