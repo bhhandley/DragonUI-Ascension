@@ -482,6 +482,7 @@ local function setOption(info, value)
     -- This guarantees that all frames are updated consistently when any option
     -- is changed from the settings panel.
     addon:RefreshUnitFrames()
+    
 
     unitframe.UpdateSafeConfig()
 end
@@ -1705,18 +1706,15 @@ function unitframe.SafeUpdatePlayerFrameText()
     -- FIXED: Check hover state for individual bars ONLY (no general frame hover)
     local healthBarHover = PlayerFrameHealthBar and IsMouseOverFrame(PlayerFrameHealthBar) or false
     local manaBarHover = PlayerFrameManaBar and IsMouseOverFrame(PlayerFrameManaBar) or false
+    
+    -- ✅ CORRECCIÓN LÓGICA: Determinar si se debe mostrar el texto.
+    -- La opción "Always" tiene prioridad. El hover solo funciona si "Always" está desactivado.
+    local shouldShowHealth = showHealthAlways or (healthBarHover and not showHealthAlways)
+    local shouldShowMana = showManaAlways or (manaBarHover and not showManaAlways)
 
-    -- FIXED: Only show texts for specific bar hover or if always enabled
-    local shouldShowHealth = showHealthAlways or healthBarHover
-    local shouldShowMana = showManaAlways or manaBarHover
-
-    -- FIXED: Update texts individually based on hover state
-    if shouldShowHealth or shouldShowMana then
-        unitframe.UpdatePlayerFrameTextSelective(shouldShowHealth, shouldShowMana)
-    else
-        -- Clear texts if nothing should be shown
-        unitframe.ClearPlayerFrameTexts()
-    end
+    -- Llamar a la función de actualización con los valores correctos.
+    -- No es necesario un 'else' para limpiar, la propia función ya lo hace.
+    unitframe.UpdatePlayerFrameTextSelective(shouldShowHealth, shouldShowMana)
 end
 
 -- FIXED: New function to update player frame texts selectively (health and/or mana)
