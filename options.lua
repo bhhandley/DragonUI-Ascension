@@ -14,6 +14,7 @@ StaticPopupDialogs["DRAGONUI_RELOAD_UI"] = {
     preferredIndex = 3
 };
 
+
 -- Helper function to create set functions with automatic refresh
 -- Uses throttling to reduce scroll reset issues
 local refreshThrottle = {}
@@ -735,7 +736,7 @@ function addon:CreateOptionsTable()
             xprepbar = {
                 type = 'group',
                 name = "XP & Rep Bars",
-                order = 4,
+                order = 6,
                 args = {
                     bothbar_offset = {
                         type = 'range',
@@ -808,7 +809,7 @@ function addon:CreateOptionsTable()
             style = {
                 type = 'group',
                 name = "Gryphons",
-                order = 5,
+                order = 7,
                 args = {
                     gryphons = {
                         type = 'select',
@@ -858,7 +859,7 @@ function addon:CreateOptionsTable()
                 type = 'group',
                 name = "Additional Bars",
                 desc = "Specialized bars that appear when needed (stance/pet/vehicle/totems)",
-                order = 6,
+                order = 8,
                 args = {
                     info_header = {
                         type = 'description',
@@ -1088,7 +1089,7 @@ function addon:CreateOptionsTable()
                 type = 'group',
                 name = "Quest Tracker",
                 desc = "Configure the position and behavior of the quest tracker",
-                order = 7,
+                order = 9,
                 args = {
                     info_text = {
                         type = 'description',
@@ -1172,7 +1173,7 @@ function addon:CreateOptionsTable()
             minimap = {
                 type = 'group',
                 name = "Minimap",
-                order = 8,
+                order = 10,
                 args = {
                     scale = {
                         type = 'range',
@@ -1401,7 +1402,7 @@ function addon:CreateOptionsTable()
             times = {
                 type = 'group',
                 name = "Time & Calendar",
-                order = 10,
+                order = 11,
                 args = {
                     clock = {
                         type = 'toggle',
@@ -1440,7 +1441,7 @@ function addon:CreateOptionsTable()
             castbars = {
                 type = 'group',
                 name = "Cast Bars",
-                order = 3,
+                order = 4,
                 args = {
                     player_castbar = {
                         type = 'group',
@@ -2325,7 +2326,7 @@ function addon:CreateOptionsTable()
             chat = {
                 type = 'group',
                 name = "Chat",
-                order = 10,
+                order = 12,
                 args = {
                     enabled = {
                         type = 'toggle',
@@ -2433,7 +2434,7 @@ function addon:CreateOptionsTable()
             unitframe = {
                 type = 'group',
                 name = "Unit Frames",
-                order = 4,
+                order = 5,
                 args = {
                     general = {
                         type = 'group',
@@ -3213,12 +3214,37 @@ function addon:CreateOptionsTable()
                 }
             },
 
-            profiles = {
-                type = 'group',
-                name = "Profiles",
-                desc = "Profile management for different characters",
-                order = 11
-            }
+             profiles = (function()
+                -- Obtenemos la tabla de opciones de perfiles estándar
+                local profileOptions = LibStub("AceDBOptions-3.0"):GetOptionsTable(addon.db)
+
+                -- Modificamos los textos para que sean más concisos
+                profileOptions.name = "Profiles"
+                profileOptions.desc = "Manage UI settings profiles."
+                profileOptions.order = 99
+                
+                --  COMPROBAMOS QUE LA TABLA DE PERFIL EXISTE ANTES DE MODIFICARLA
+                if profileOptions.args and profileOptions.args.profile then
+                    profileOptions.args.profile.name = "Active Profile"
+                    profileOptions.args.profile.desc = "Choose the profile to use for your settings."
+                end
+                
+                -- AÑADIMOS LA DESCRIPCIÓN Y EL BOTÓN DE RECARGA
+                profileOptions.args.reload_warning = {
+                    type = 'description',
+                    name = "\n|cffFFD700It's recommended to reload the UI after switching profiles.|r",
+                    order = 15 -- Justo después del selector de perfiles
+                }
+                
+                profileOptions.args.reload_execute = {
+                    type = 'execute',
+                    name = "Reload UI",
+                    func = function() ReloadUI() end,
+                    order = 16 -- Justo después del texto de advertencia
+                }
+
+                return profileOptions
+            end)(),
         }
     }
 end
