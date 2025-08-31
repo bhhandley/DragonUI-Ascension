@@ -612,13 +612,18 @@ local function HideBlizzardCastbar(castbarType)
         return
     end
 
-    if castbarType == "target" then
-        -- Para target: no usar Hide() - necesitamos las actualizaciones para sincronización
+    if castbarType == "target" or castbarType == "player" then
+        -- CORRECCIÓN: Tratar al player igual que al target para permitir la sincronización.
+        -- No usar Hide() - necesitamos las actualizaciones para sincronización.
         frame:SetAlpha(0);
         frame:ClearAllPoints();
         frame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", -2000, -2000);
+        -- Adicionalmente, nos aseguramos de que no tenga script OnShow que la oculte.
+        if frame.SetScript then
+            frame:SetScript("OnShow", nil);
+        end
     else
-        -- Para player y focus: ocultar completamente
+        -- Para focus: ocultar completamente ya que no hay sincronización para él.
         frame:Hide();
         frame:SetAlpha(0);
         if frame.SetScript then
@@ -650,6 +655,12 @@ local function ShowBlizzardCastbar(castbarType)
         -- Restaurar posición original del target castbar
         frame:ClearAllPoints();
         frame:SetPoint("TOPLEFT", TargetFrame, "BOTTOMLEFT", 25, -5);
+    elseif castbarType == "player" then
+        -- Restaurar posición original del player castbar
+        frame:ClearAllPoints();
+        -- La posición por defecto de la barra de casteo del jugador es manejada por Blizzard,
+        -- pero podemos anclarla a UIParent si es necesario.
+        -- Dejar que Blizzard la maneje al mostrarla suele ser suficiente.
     end
 end
 
@@ -745,6 +756,8 @@ local function SyncWithBlizzardCastbar(castbarType, ourFrame)
     end
 
     -- Verificar si el frame de Blizzard está visible/activo
+    -- CORRECCIÓN: La barra del player ahora no se oculta, por lo que IsVisible() debería funcionar.
+    -- Mantenemos la excepción para el target por si acaso.
     if not blizzardFrame:IsVisible() and castbarType ~= "target" then
         return false
     end
@@ -1098,12 +1111,13 @@ local function UpdateCastbar(castbarType, self, elapsed)
             shouldSync = false;
         end
 
-        if shouldSync then
+         if shouldSync then
             -- Intentar sincronizar con castbar de Blizzard primero  
             local syncSucceeded = SyncWithBlizzardCastbar(castbarType, self);
 
-            -- Para player castbar, siempre hacer fallback a cálculo manual
-            if not syncSucceeded or castbarType == "player" then
+            -- CORRECCIÓN: Eliminar la condición "or castbarType == 'player'"
+            -- para que el jugador use la sincronización y solo use el fallback si esta falla.
+            if not syncSucceeded then
                 -- Fallback a cálculo manual
                 if state.casting and not state.isChanneling then
                     state.currentValue = state.currentValue + elapsed;
