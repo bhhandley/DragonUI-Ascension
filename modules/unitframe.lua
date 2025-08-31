@@ -923,26 +923,22 @@ function unitframe:ApplySettings()
             objLocal.y = addon.defaults.profile.unitframe.target.y
         end
 
-        if obj.override then
+        if targetConfig.override then
             TargetFrame:SetMovable(1)
             TargetFrame:StartMoving()
-            unitframe.MoveTargetFrame(obj.anchor, obj.anchorParent, obj.x, obj.y)
+            unitframe.MoveTargetFrame(targetConfig.anchor, targetConfig.anchorParent, targetConfig.x, targetConfig.y)
             -- TargetFrame:SetUserPlaced(true)
             TargetFrame:StopMovingOrSizing()
             TargetFrame:SetMovable()
         else
             unitframe.MoveTargetFrame(objLocal.anchor, objLocal.anchorParent, objLocal.x, objLocal.y)
         end
-		-- Support for Combo Points scaling
-        TargetFrame:SetScale(obj.scale)
-			if ComboFrame and TargetFrame then
-				ComboFrame:SetScale(TargetFrame:GetScale() or 1)
-			end
-        -- unitframe.ReApplyTargetFrame() -- REMOVED: Redundant call.
-        -- unitframe.ChangeToT() -- REMOVED: Redundant call.
-        -- if UnitExists('targettarget') then -- REMOVED: Redundant call.
-        --     unitframe.ReApplyToTFrame()
-        -- end
+        -- Support for Combo Points scaling
+        TargetFrame:SetScale(targetConfig.scale)
+            if ComboFrame and TargetFrame then
+                ComboFrame:SetScale(TargetFrame:GetScale() or 1)
+            end
+      
     end
 
      if true then
