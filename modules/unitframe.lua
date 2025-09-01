@@ -5987,9 +5987,14 @@ function unitframe.ChangePartyFrame()
         pf:RegisterEvent('UNIT_MAXPOWER')
         pf:RegisterEvent('UNIT_DISPLAYPOWER')
 
-        -- Hook mana bar value changes to update texture coordinates
+        -- Hook mana bar value changes to update texture coordinates AND text
         manabar:HookScript('OnValueChanged', function(self, value)
             unitframe.SetPartyManaBarCoords(self, 0) -- Actualizar coordenadas cuando cambie el valor
+
+            -- ✅ FIX: También actualizar texto inmediatamente
+            if UnitExists('party' .. i) then
+                unitframe.UpdatePartyFrameText(i)
+            end
         end)
 
         -- Hook health bar value changes to maintain class colors and texture switching
@@ -6097,13 +6102,13 @@ function unitframe.ChangePartyFrame()
                         break
                     end
                 end
-                
+
                 -- Skip update if no party members (someone just declined invitation)
                 if not hasPartyMembers then
                     return
                 end
             end
-            
+
             -- FIXED: Use WoW 3.3.5a compatible timer instead of C_Timer.After
             local updateFrame = CreateFrame("Frame")
             local updateTime = 0
@@ -7233,50 +7238,50 @@ function eventFrame:OnEvent(event, arg1)
     elseif event == 'UNIT_POWER_UPDATE' then
 
     elseif event == "PARTY_MEMBERS_CHANGED" then
-    -- ✅ CORRECCIÓN: Cargar la configuración party ANTES de usarla
-    local partyConfig = addon:GetConfigValue("unitframe", "party") or {}
-    
-    local inCombat = InCombatLockdown()
-    
-    -- Inicializar party frames si no existen
-    if not unitframe.PartyMoveFrame and not inCombat then
-        unitframe.ChangePartyFrame()
-    end
-    
-    -- ✅ CRÍTICO: Mostrar/ocultar según si hay miembros
-    if unitframe.PartyMoveFrame then
-        if GetNumPartyMembers() > 0 then
-            -- HAY PARTY: Mostrar el frame y configurarlo
-            unitframe.PartyMoveFrame:Show()
-            unitframe:UpdatePartyState(partyConfig)
-        else
-            -- NO HAY PARTY: Ocultar el frame
-            unitframe.PartyMoveFrame:Hide()
+        -- ✅ CORRECCIÓN: Cargar la configuración party ANTES de usarla
+        local partyConfig = addon:GetConfigValue("unitframe", "party") or {}
+
+        local inCombat = InCombatLockdown()
+
+        -- Inicializar party frames si no existen
+        if not unitframe.PartyMoveFrame and not inCombat then
+            unitframe.ChangePartyFrame()
         end
-    end
-    
-    -- Actualizar cada frame individual
-    for i = 1, 4 do
-        local pf = _G['PartyMemberFrame' .. i]
-        if pf then
-            if UnitExists('party' .. i) then
-                if not inCombat then
-                    pf:Show()
-                    pf:SetAlpha(1)
-                end
-                unitframe.UpdatePartyHPBar(i)
-                unitframe.UpdatePartyManaBar(i)
-                unitframe.UpdatePartyFrameText(i)
+
+        -- ✅ CRÍTICO: Mostrar/ocultar según si hay miembros
+        if unitframe.PartyMoveFrame then
+            if GetNumPartyMembers() > 0 then
+                -- HAY PARTY: Mostrar el frame y configurarlo
+                unitframe.PartyMoveFrame:Show()
+                unitframe:UpdatePartyState(partyConfig)
             else
-                unitframe.ClearPartyFrameTexts(i)
-                if not inCombat then
-                    pf:Hide()
-                    pf:SetAlpha(0)
+                -- NO HAY PARTY: Ocultar el frame
+                unitframe.PartyMoveFrame:Hide()
+            end
+        end
+
+        -- Actualizar cada frame individual
+        for i = 1, 4 do
+            local pf = _G['PartyMemberFrame' .. i]
+            if pf then
+                if UnitExists('party' .. i) then
+                    if not inCombat then
+                        pf:Show()
+                        pf:SetAlpha(1)
+                    end
+                    unitframe.UpdatePartyHPBar(i)
+                    unitframe.UpdatePartyManaBar(i)
+                    unitframe.UpdatePartyFrameText(i)
+                else
+                    unitframe.ClearPartyFrameTexts(i)
+                    if not inCombat then
+                        pf:Hide()
+                        pf:SetAlpha(0)
+                    end
                 end
             end
         end
-    end
-        
+
         -- Solo reconfigurar posiciones fuera de combate
         if not inCombat then
             local partyConfig = addon:GetConfigValue("unitframe", "party") or {}
@@ -7284,7 +7289,7 @@ function eventFrame:OnEvent(event, arg1)
                 unitframe:UpdatePartyState(partyConfig)
             end
         end
-        
+
     elseif event == "PARTY_MEMBER_DISABLE" then
         -- ✅ MIEMBRO OFFLINE: Actualizar frame específico
         for i = 1, 4 do
@@ -7306,7 +7311,7 @@ function eventFrame:OnEvent(event, arg1)
                 end
             end
         end
-        
+
     elseif event == "PARTY_MEMBER_ENABLE" then
         -- ✅ MIEMBRO ONLINE: Restaurar frame específico
         for i = 1, 4 do
@@ -7320,7 +7325,7 @@ function eventFrame:OnEvent(event, arg1)
                 end
             end
         end
-        
+
     elseif event == "PARTY_CONVERTED_TO_RAID" then
         -- ✅ CONVERTIDO A RAID: Ocultar party frames
         for i = 1, 4 do
@@ -7331,7 +7336,7 @@ function eventFrame:OnEvent(event, arg1)
                 unitframe.ClearPartyFrameTexts(i)
             end
         end
-        
+
     elseif event == "PARTY_LEADER_CHANGED" then
         -- ✅ LIDER CAMBIADO: Actualizar iconos de liderazgo
         for i = 1, 4 do
@@ -7339,10 +7344,11 @@ function eventFrame:OnEvent(event, arg1)
                 unitframe.UpdatePartyFrameText(i) -- Actualizar para refrescar iconos
             end
         end
-        
+
         -- Focus frame handling (mantener código existente)
         if UnitExists('focus') then
-            local shouldUseClassColor = addon:GetConfigValue("unitframe", "focus", "classcolor") and UnitIsPlayer('focus')
+            local shouldUseClassColor = addon:GetConfigValue("unitframe", "focus", "classcolor") and
+                                            UnitIsPlayer('focus')
             if shouldUseClassColor then
                 local localizedClass, englishClass, classIndex = UnitClass('focus')
                 if englishClass and RAID_CLASS_COLORS[englishClass] then
@@ -7503,7 +7509,7 @@ eventFrame:RegisterEvent('PLAYER_UNGHOST')
 eventFrame:RegisterEvent('UNIT_CONNECTION')
 eventFrame:RegisterEvent('PARTY_MEMBERS_CHANGED')
 eventFrame:RegisterEvent('PARTY_MEMBER_DISABLE')
-eventFrame:RegisterEvent('PARTY_MEMBER_ENABLE')  
+eventFrame:RegisterEvent('PARTY_MEMBER_ENABLE')
 eventFrame:RegisterEvent('PARTY_CONVERTED_TO_RAID')
 eventFrame:RegisterEvent('PARTY_LEADER_CHANGED')
 
@@ -8097,5 +8103,4 @@ profileCallbackFrame:SetScript("OnEvent", function(self, event, addonName)
         self:UnregisterEvent("ADDON_LOADED")
     end
 end)
-
 
