@@ -20,7 +20,7 @@ A personal project bringing Dragonflight UI aesthetics to WotLK 3.3.5a.
 *   **Editor Mode (WIP):** Easy drag-and-drop system for repositioning frames and UI elements
 *   **Comprehensive Configuration:** Extensive in-game options panel with customization for positioning, scaling and visual elements
 *   **Profile Management:** Save and switch between different UI configurations per character
-*   **Conflict Detection:** Warns about potentially conflicting addons
+*   **Compatibility Manager:** Automatic detection and coordination with other addons for seamless integration
 
 ## Installation
 
