@@ -89,7 +89,6 @@ local GRACE_PERIOD_AFTER_SUCCESS = 0.15;
 -- VARIABLES DE ESTADO UNIFICADAS
 -- =================================================================
 
--- Estados por tipo de castbar (consolidado)
 addon.castbarStates = {
     player = {
         casting = false,
@@ -101,7 +100,8 @@ addon.castbarStates = {
         currentValue = 0,
         maxValue = 0,
         castSucceeded = false,
-        graceTime = 0
+        graceTime = 0,
+        selfInterrupt = false 
     },
     target = {
         casting = false,
@@ -111,7 +111,8 @@ addon.castbarStates = {
         holdTime = 0,
         currentSpellName = "",
         currentValue = 0,
-        maxValue = 0
+        maxValue = 0,
+        selfInterrupt = false 
     },
     focus = {
         casting = false,
@@ -121,9 +122,11 @@ addon.castbarStates = {
         holdTime = 0,
         currentSpellName = "",
         currentValue = 0,
-        maxValue = 0
+        maxValue = 0,
+        selfInterrupt = false 
     }
 };
+
 
 -- Frames consolidados
 local frames = {
@@ -850,7 +853,7 @@ end
 
 
 -- Función unificada para manejar parada/interrupción de cast
-local function HandleCastStop(castbarType, event, isInterrupted)
+local function HandleCastStop(castbarType, event, forceInterrupted)
     local state = addon.castbarStates[castbarType];
     local frameData = frames[castbarType];
     local cfg = addon.db.profile.castbar;
@@ -863,19 +866,9 @@ local function HandleCastStop(castbarType, event, isInterrupted)
         return
     end
 
-    -- Calcular porcentaje de completado
-    local completionPercentage = 0;
-    if state.maxValue and state.maxValue > 0 then
-        if state.isChanneling then
-            completionPercentage = (state.maxValue - state.currentValue) / state.maxValue;
-        else
-            completionPercentage = state.currentValue / state.maxValue;
-        end
-    end
-
-    -- Manejar según el tipo de evento y completado
-    if isInterrupted then
-        -- Interrupción real - mostrar estado interrumpido
+    -- ✅ NUEVA LÓGICA: Distinguir entre STOP natural vs INTERRUPTED real
+    if forceInterrupted then
+        -- Solo mostrar "Interrupted" cuando es realmente una interrupción
         if frameData.shield then
             frameData.shield:Hide()
         end
@@ -885,12 +878,10 @@ local function HandleCastStop(castbarType, event, isInterrupted)
         frameData.castbar:SetStatusBarColor(1, 0, 0, 1);
         ForceStatusBarTextureLayer(frameData.castbar);
 
-        -- CORREGIDO: Para interrupciones, usar el sistema de clipping como las otras barras
-        frameData.castbar:SetValue(state.maxValue); -- Llenar completamente la barra
+        frameData.castbar:SetValue(state.maxValue);
 
-        -- Usar UpdateTextureClipping para mantener capas consistentes
         if frameData.castbar.UpdateTextureClipping then
-            frameData.castbar:UpdateTextureClipping(1.0, false); -- Mostrar completo sin recorte
+            frameData.castbar:UpdateTextureClipping(1.0, false);
         end
 
         SetCastText(castbarType, "Interrupted");
@@ -898,17 +889,13 @@ local function HandleCastStop(castbarType, event, isInterrupted)
         state.casting = false;
         state.isChanneling = false;
         state.holdTime = cfg.holdTimeInterrupt or 0.8;
-    elseif completionPercentage >= (state.isChanneling and 0.9 or 0.95) then
-        -- Completado exitosamente
+    else
+        -- ✅ PARA STOP: Completar normalmente sin mensaje de interrupción
         if castbarType == "player" then
-            state.castSucceeded = true; -- Activar período de gracia
+            state.castSucceeded = true;
         else
             FinishSpell(castbarType);
         end
-    else
-        -- Cancelación manual (movimiento, Esc, etc.) o cambio de hechizo.
-        -- Tratar como una interrupción para mostrar la barra roja.
-        HandleCastStop(castbarType, event, true);
     end
 end
 
@@ -1086,25 +1073,7 @@ local function UpdateCastbar(castbarType, self, elapsed)
 
     -- Usar valores perfectos de Blizzard para casts y channels
     if state.casting or state.isChanneling then
-        -- FIXED: Detect silent interruptions (e.g., from CC or other game mechanics)
-        local unit = castbarType == "player" and "player" or castbarType;
-        local isStillCasting = UnitCastingInfo(unit);
-        local isStillChanneling = UnitChannelInfo(unit);
-
-        if not isStillCasting and not isStillChanneling then
-            -- The game says we are not casting/channeling, but our addon thinks we are.
-            -- This is a silent interruption.
-            if HandleCastStop then
-                HandleCastStop(castbarType, 'UNIT_SPELLCAST_INTERRUPTED', true);
-            else
-                -- Fallback: hide castbar immediately
-                self:Hide();
-                state.casting = false;
-                state.isChanneling = false;
-                state.holdTime = 0;
-            end
-            return; -- Stop further processing for this frame
-        end
+        
         -- No sincronizar con Blizzard durante período de gracia
         local shouldSync = true;
         if castbarType == "player" and state.castSucceeded then
@@ -1418,33 +1387,48 @@ local function HandleCastingEvents(castbarType, event, unit, ...)
     if event == 'UNIT_SPELLCAST_START' then
         HandleCastStart(castbarType, unitToCheck);
     elseif event == 'UNIT_SPELLCAST_SUCCEEDED' then
-        -- Solo para player - marcar cast como exitoso
-        if castbarType == "player" then
-            local state = addon.castbarStates[castbarType];
-            if state.casting or state.isChanneling then
+        -- ✅ SUCCEEDED garantiza éxito - marcar como exitoso
+        local state = addon.castbarStates[castbarType];
+        if state.casting or state.isChanneling then
+            if castbarType == "player" then
                 state.castSucceeded = true;
+            else
+                FinishSpell(castbarType);
             end
         end
     elseif event == 'UNIT_SPELLCAST_CHANNEL_START' then
         HandleChannelStart(castbarType, unitToCheck);
     elseif event == 'UNIT_SPELLCAST_STOP' then
+        -- ✅ CORRECCIÓN: STOP nunca es interrupción - siempre completar normalmente
         HandleCastStop(castbarType, event, false);
     elseif event == 'UNIT_SPELLCAST_CHANNEL_STOP' then
-        -- Para channels, verificar si fue interrumpido
-        local state = addon.castbarStates[castbarType];
-        local isInterrupted = false;
-
-        -- Si el channel se detiene antes del 90% de completado, probablemente fue interrumpido
-        if state.isChanneling and state.maxValue > 0 then
-            local completionPercentage = (state.maxValue - state.currentValue) / state.maxValue;
-            isInterrupted = completionPercentage < 0.9;
-        end
-
-        HandleCastStop(castbarType, event, isInterrupted);
+        -- ✅ CORRECCIÓN: CHANNEL_STOP nunca es interrupción real
+        HandleCastStop(castbarType, event, false);
     elseif event == 'UNIT_SPELLCAST_FAILED' then
-        -- Ignorar completamente eventos FAILED - solo ruido de cola
+        -- ✅ FAILED es fracaso real - pero NO mostrar "Interrupted"
+        local state = addon.castbarStates[castbarType];
+        local frameData = frames[castbarType];
+        
+        frameData.castbar:SetStatusBarTexture(TEXTURES.interrupted);
+        frameData.castbar:SetStatusBarColor(1, 0, 0, 1);
+        
+        state.casting = false;
+        state.isChanneling = false;
+        state.holdTime = cfg.holdTime or 0.3;
     elseif event == 'UNIT_SPELLCAST_INTERRUPTED' then
-        HandleCastStop(castbarType, event, true);
+        -- ✅ SOLUCIÓN SIMPLE: Solo verificar si queda poco tiempo
+        local state = addon.castbarStates[castbarType];
+        local showInterrupted = true;
+        
+        if state.isChanneling and state.currentValue and state.maxValue then
+            -- Para channels: si queda menos del 5% del tiempo total, es natural
+            local progressRemaining = state.currentValue / state.maxValue;
+            if progressRemaining < 0.05 then
+                showInterrupted = false;
+            end
+        end
+        
+        HandleCastStop(castbarType, event, showInterrupted);
     end
 end
 
