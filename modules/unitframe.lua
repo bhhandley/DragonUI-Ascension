@@ -168,11 +168,10 @@ end
 --]]
 local function FormatStatusText(current, maximum, textFormat, useBreakup, frameType)
     if frameType then
-        local unit = frameType == "player" and "player" or 
-                    frameType == "target" and "target" or
-                    frameType == "focus" and "focus" or
-                    frameType == "pet" and "pet" or nil
-        
+        local unit =
+            frameType == "player" and "player" or frameType == "target" and "target" or frameType == "focus" and "focus" or
+                frameType == "pet" and "pet" or nil
+
         if unit then
             if UnitIsDeadOrGhost(unit) or not UnitExists(unit) then
                 return ""
@@ -482,7 +481,6 @@ local function setOption(info, value)
     -- This guarantees that all frames are updated consistently when any option
     -- is changed from the settings panel.
     addon:RefreshUnitFrames()
-    
 
     unitframe.UpdateSafeConfig()
 end
@@ -895,13 +893,13 @@ function unitframe:ApplySettings()
         if playerConfig.override then
             PlayerFrame:SetUserPlaced(true)
         end
-        
+
         -- ✅ Call MovePlayerFrame with the correct arguments
         unitframe.MovePlayerFrame(anchor, anchorParent, anchorPoint, x, y)
         PlayerFrame:SetScale(playerConfig.scale or 1)
     end
 
-   -- target
+    -- target
     do
         -- ✅ CORRECCIÓN: Cargar la configuración del target desde la base de datos.
         local targetConfig = addon:GetConfigValue("unitframe", "target") or {}
@@ -936,13 +934,13 @@ function unitframe:ApplySettings()
         end
         -- Support for Combo Points scaling
         TargetFrame:SetScale(targetConfig.scale)
-            if ComboFrame and TargetFrame then
-                ComboFrame:SetScale(TargetFrame:GetScale() or 1)
-            end
-      
+        if ComboFrame and TargetFrame then
+            ComboFrame:SetScale(TargetFrame:GetScale() or 1)
+        end
+
     end
 
-     if true then
+    if true then
         -- focus
         do
             -- ✅ CORRECCIÓN: Usar la misma lógica de carga que Player/Target.
@@ -1232,7 +1230,7 @@ function unitframe.UpdateTargetFrameText()
     end
 
     -- FIXED: Clear target frame texts if no target exists
-   if not UnitExists('target') or UnitIsDeadOrGhost('target') then
+    if not UnitExists('target') or UnitIsDeadOrGhost('target') then
         unitframe.ClearTargetFrameTexts()
         return
     end
@@ -1706,7 +1704,7 @@ function unitframe.SafeUpdatePlayerFrameText()
     -- FIXED: Check hover state for individual bars ONLY (no general frame hover)
     local healthBarHover = PlayerFrameHealthBar and IsMouseOverFrame(PlayerFrameHealthBar) or false
     local manaBarHover = PlayerFrameManaBar and IsMouseOverFrame(PlayerFrameManaBar) or false
-    
+
     -- ✅ CORRECCIÓN LÓGICA: Determinar si se debe mostrar el texto.
     -- La opción "Always" tiene prioridad. El hover solo funciona si "Always" está desactivado.
     local shouldShowHealth = showHealthAlways or (healthBarHover and not showHealthAlways)
@@ -1837,32 +1835,36 @@ function unitframe.UpdatePlayerFrameTextSelective(showHealth, showMana)
             dragonFrame.PlayerFrameManaBarTextRight:SetText("")
             dragonFrame.PlayerFrameManaBarTextRight:Hide()
         end
-	end
-		
-	-- Handle Druid Alternate Mana Bar
+    end
+
+    -- Handle Druid Alternate Mana Bar
     if PlayerFrameAlternateManaBar and PlayerFrameAlternateManaBar:IsVisible() then
         if not _G["DragonUIDruidManaText"] then
-            local text = PlayerFrameAlternateManaBar:CreateFontString("DragonUIDruidManaText", "OVERLAY", "TextStatusBarText")
+            local text = PlayerFrameAlternateManaBar:CreateFontString("DragonUIDruidManaText", "OVERLAY",
+                "TextStatusBarText")
             text:SetPoint("CENTER", PlayerFrameAlternateManaBar, "CENTER", 0, 0)
         end
         if not _G["DragonUIDruidManaTextLeft"] then
-            local textLeft = PlayerFrameAlternateManaBar:CreateFontString("DragonUIDruidManaTextLeft", "OVERLAY", "TextStatusBarText")
+            local textLeft = PlayerFrameAlternateManaBar:CreateFontString("DragonUIDruidManaTextLeft", "OVERLAY",
+                "TextStatusBarText")
             textLeft:SetPoint("LEFT", PlayerFrameAlternateManaBar, "LEFT", 6, 0)
             textLeft:SetJustifyH("LEFT")
         end
         if not _G["DragonUIDruidManaTextRight"] then
-            local textRight = PlayerFrameAlternateManaBar:CreateFontString("DragonUIDruidManaTextRight", "OVERLAY", "TextStatusBarText")
+            local textRight = PlayerFrameAlternateManaBar:CreateFontString("DragonUIDruidManaTextRight", "OVERLAY",
+                "TextStatusBarText")
             textRight:SetPoint("RIGHT", PlayerFrameAlternateManaBar, "RIGHT", -6, 0)
             textRight:SetJustifyH("RIGHT")
         end
-        
+
         local textFrame = _G["DragonUIDruidManaText"]
         local textFrameLeft = _G["DragonUIDruidManaTextLeft"]
         local textFrameRight = _G["DragonUIDruidManaTextRight"]
 
         if showMana then
             local mana, maxMana = UnitPower("player", 0), UnitPowerMax("player", 0)
-            local formattedText = FormatStatusText(mana, maxMana, config.textFormat, config.breakUpLargeNumbers, "player")
+            local formattedText = FormatStatusText(mana, maxMana, config.textFormat, config.breakUpLargeNumbers,
+                "player")
 
             if type(formattedText) == "table" then
                 textFrameLeft:SetText(formattedText.percentage or "")
@@ -1883,8 +1885,12 @@ function unitframe.UpdatePlayerFrameTextSelective(showHealth, showMana)
         end
     elseif _G["DragonUIDruidManaText"] then
         _G["DragonUIDruidManaText"]:Hide()
-        if _G["DragonUIDruidManaTextLeft"] then _G["DragonUIDruidManaTextLeft"]:Hide() end
-        if _G["DragonUIDruidManaTextRight"] then _G["DragonUIDruidManaTextRight"]:Hide() end
+        if _G["DragonUIDruidManaTextLeft"] then
+            _G["DragonUIDruidManaTextLeft"]:Hide()
+        end
+        if _G["DragonUIDruidManaTextRight"] then
+            _G["DragonUIDruidManaTextRight"]:Hide()
+        end
     end
 end
 
@@ -2592,32 +2598,33 @@ function unitframe.HookVertexColor()
         end
 
         -- Hook focus events for consistent color updates  
-       FocusFrame:HookScript('OnEvent', function(self, event, arg1)
-    if event == 'PARTY_MEMBERS_CHANGED' or event == 'GROUP_ROSTER_UPDATE' then
-        -- SIMPLE: Solo aplicar colores sin logging ni delays complejos
-        if UnitExists('focus') then
-            -- Obtener configuración actual
-            local shouldUseClassColor = addon:GetConfigValue("unitframe", "focus", "classcolor") and UnitIsPlayer('focus')
-            
-            if shouldUseClassColor then
-                local localizedClass, englishClass, classIndex = UnitClass('focus')
-                if englishClass and RAID_CLASS_COLORS[englishClass] then
-                    local color = RAID_CLASS_COLORS[englishClass]
-                    FocusFrameHealthBar:SetStatusBarColor(color.r, color.g, color.b, 1)
-                else
-                    FocusFrameHealthBar:SetStatusBarColor(1, 1, 1, 1)
+        FocusFrame:HookScript('OnEvent', function(self, event, arg1)
+            if event == 'PARTY_MEMBERS_CHANGED' or event == 'PARTY_MEMBER_ENABLE' or event == 'PARTY_MEMBER_DISABLE' then
+                -- SIMPLE: Solo aplicar colores sin logging ni delays complejos
+                if UnitExists('focus') then
+                    -- Obtener configuración actual
+                    local shouldUseClassColor = addon:GetConfigValue("unitframe", "focus", "classcolor") and
+                                                    UnitIsPlayer('focus')
+
+                    if shouldUseClassColor then
+                        local localizedClass, englishClass, classIndex = UnitClass('focus')
+                        if englishClass and RAID_CLASS_COLORS[englishClass] then
+                            local color = RAID_CLASS_COLORS[englishClass]
+                            FocusFrameHealthBar:SetStatusBarColor(color.r, color.g, color.b, 1)
+                        else
+                            FocusFrameHealthBar:SetStatusBarColor(1, 1, 1, 1)
+                        end
+                    else
+                        FocusFrameHealthBar:SetStatusBarColor(1, 1, 1, 1)
+                    end
+
+                    -- Asegurar color blanco en mana (sin verificaciones complejas)
+                    if FocusFrameManaBar then
+                        FocusFrameManaBar:SetStatusBarColor(1, 1, 1, 1)
+                    end
                 end
-            else
-                FocusFrameHealthBar:SetStatusBarColor(1, 1, 1, 1)
             end
-            
-            -- Asegurar color blanco en mana (sin verificaciones complejas)
-            if FocusFrameManaBar then
-                FocusFrameManaBar:SetStatusBarColor(1, 1, 1, 1)
-            end
-        end
-    end
-end)
+        end)
         FocusFrameHealthBar:HookScript('OnValueChanged', function(self)
             if addon:GetConfigValue("unitframe", "focus", "classcolor") and UnitIsPlayer('focus') then
                 FocusFrameHealthBar:GetStatusBarTexture():SetTexture(
@@ -2719,16 +2726,18 @@ function unitframe.ChangePlayerframe()
     end
 
     -- Fix text overlap when Character info panel is open
-   if PlayerFrameHealthBarText and not PlayerFrameHealthBarText.DragonUINoShow then
+    if PlayerFrameHealthBarText and not PlayerFrameHealthBarText.DragonUINoShow then
         -- Permanently disable Blizzard's health text by overriding its Show method.
-        PlayerFrameHealthBarText.Show = function() end 
+        PlayerFrameHealthBarText.Show = function()
+        end
         PlayerFrameHealthBarText:Hide() -- Hide it one last time just in case.
         PlayerFrameHealthBarText.DragonUINoShow = true -- Flag it as handled.
     end
-    
+
     if PlayerFrameManaBarText and not PlayerFrameManaBarText.DragonUINoShow then
         -- Permanently disable Blizzard's mana text by overriding its Show method.
-        PlayerFrameManaBarText.Show = function() end
+        PlayerFrameManaBarText.Show = function()
+        end
         PlayerFrameManaBarText:Hide() -- Hide it one last time.
         PlayerFrameManaBarText.DragonUINoShow = true -- Flag it as handled.
     end
@@ -3184,7 +3193,8 @@ end
 function unitframe.MovePlayerFrame(point, relativeTo, relativePoint, xOfs, yOfs)
     PlayerFrame:ClearAllPoints()
     -- Usamos _G[relativeTo] para asegurarnos de que funciona con "UIParent" u otros marcos
-    PlayerFrame:SetPoint(point or "TOPLEFT", _G[relativeTo or "UIParent"] or UIParent, relativePoint or "TOPLEFT", xOfs or -24, yOfs or -4)
+    PlayerFrame:SetPoint(point or "TOPLEFT", _G[relativeTo or "UIParent"] or UIParent, relativePoint or "TOPLEFT",
+        xOfs or -24, yOfs or -4)
 end
 
 function unitframe.ChangeTargetFrame()
@@ -4367,7 +4377,8 @@ end
 function unitframe.MoveTargetFrame(point, relativeTo, relativePoint, xOfs, yOfs)
     TargetFrame:ClearAllPoints()
     -- Usamos _G[relativeTo] para asegurarnos de que funciona con "UIParent" u otros marcos
-    TargetFrame:SetPoint(point or "TOPLEFT", _G[relativeTo or "UIParent"] or UIParent, relativePoint or "TOPLEFT", xOfs or 216, yOfs or -4)
+    TargetFrame:SetPoint(point or "TOPLEFT", _G[relativeTo or "UIParent"] or UIParent, relativePoint or "TOPLEFT",
+        xOfs or 216, yOfs or -4)
 end
 
 function unitframe.ChangeFocusFrame()
@@ -4900,23 +4911,20 @@ end
 
 function unitframe.MoveFocusFrame(point, relativeTo, relativePoint, xOfs, yOfs)
     FocusFrame:ClearAllPoints()
-    FocusFrame:SetPoint(point or "TOPLEFT", _G[relativeTo or "UIParent"] or UIParent, relativePoint or "TOPLEFT", xOfs or 288, yOfs or -258)
+    FocusFrame:SetPoint(point or "TOPLEFT", _G[relativeTo or "UIParent"] or UIParent, relativePoint or "TOPLEFT",
+        xOfs or 288, yOfs or -258)
 end
 function unitframe.ReApplyFocusFrame()
     -- FIXED: Función más robusta que SIEMPRE aplica colores correctamente
-    
+
     if not UnitExists('focus') then
-      
+
         return
     end
-    
-  
-    
+
     -- 1. SIEMPRE aplicar la configuración de colores de clase
     local shouldUseClassColor = addon:GetConfigValue("unitframe", "focus", "classcolor") and UnitIsPlayer('focus')
-    
-    
-    
+
     if shouldUseClassColor then
         local localizedClass, englishClass, classIndex = UnitClass('focus')
         if englishClass and RAID_CLASS_COLORS[englishClass] then
@@ -4924,14 +4932,13 @@ function unitframe.ReApplyFocusFrame()
                 'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health-Status')
             local color = RAID_CLASS_COLORS[englishClass]
             FocusFrameHealthBar:SetStatusBarColor(color.r, color.g, color.b, 1)
-            
-           
+
         else
             -- Fallback si no se puede obtener la clase
             FocusFrameHealthBar:GetStatusBarTexture():SetTexture(
                 'Interface\\Addons\\DragonUI\\Textures\\Unitframe\\UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health')
             FocusFrameHealthBar:SetStatusBarColor(1, 1, 1, 1)
-          
+
         end
     else
         -- CRÍTICO: Colores de clase deshabilitados o no es jugador - FORZAR BLANCO
@@ -4949,7 +4956,7 @@ function unitframe.ReApplyFocusFrame()
         local maxHealth = UnitHealthMax("focus")
         FocusFrameHealthBar:SetMinMaxValues(0, maxHealth)
         FocusFrameHealthBar:SetValue(currentHealth)
-      
+
     end
 
     -- 4. CRÍTICO: Aplicar configuración de power bar con COLOR BLANCO FORZADO
@@ -4975,7 +4982,6 @@ function unitframe.ReApplyFocusFrame()
     -- CRÍTICO: SIEMPRE forzar color blanco en la barra de poder
     FocusFrameManaBar:SetStatusBarColor(1, 1, 1, 1)
 
-
     -- 5. Ocultar flash de combate si existe
     if FocusFrameFlash then
         FocusFrameFlash:SetTexture('')
@@ -4985,7 +4991,6 @@ function unitframe.ReApplyFocusFrame()
     if frame.FocusExtra then
         frame.FocusExtra:UpdateStyle()
     end
-    
 
 end
 
@@ -5703,12 +5708,27 @@ end
 function unitframe.ChangePartyFrame()
     -- Create main container frame for party frames
     local PartyMoveFrame = CreateFrame('Frame', 'DragonUIPartyMoveFrame', UIParent)
-    -- FIXED: Use LOW strata like original Blizzard party frames (per documentation)
-    PartyMoveFrame:SetFrameStrata('LOW')
-    -- FIXED: Use reasonable frame level, not excessively high
-    PartyMoveFrame:SetFrameLevel(2)
+    -- FIXED: Use BACKGROUND strata to stay behind Compact Raid Frames which use LOW/MEDIUM
+    -- This prevents our party frames from appearing over raid frames
+    PartyMoveFrame:SetFrameStrata('BACKGROUND')
+    -- FIXED: Use lower frame level to ensure compatibility with other addons
+    PartyMoveFrame:SetFrameLevel(1)
     PartyMoveFrame:Show() -- Force show
     unitframe.PartyMoveFrame = PartyMoveFrame
+
+    -- Ocultar frames blizzard:
+
+    for i = 1, 4 do
+        local originalFrame = _G['PartyMemberFrame' .. i]
+        if originalFrame then
+            -- Desanclar de posición original
+            originalFrame:SetMovable(true)
+            originalFrame:ClearAllPoints()
+            -- Reparentar a nuestro contenedor para control completo
+            originalFrame:SetParent(PartyMoveFrame)
+            originalFrame:SetMovable(false)
+        end
+    end
 
     -- PartyMoveFrame created
 
@@ -5822,9 +5842,9 @@ function unitframe.ChangePartyFrame()
         healthbar:ClearAllPoints()
         healthbar:SetPoint('TOPLEFT', 45 - 1, -19)
 
-        -- FIXED: Set frame level to be above border layer (which is on DrawLayer BORDER)
-        -- Health bars are functional elements, should be above decorative borders
-        healthbar:SetFrameLevel(5)
+        -- FIXED: Set frame level to be above border layer but not excessively high
+        -- This prevents conflicts with other addons while maintaining proper layering
+        healthbar:SetFrameLevel(3)
 
         -- Use individual texture files instead of uipartyframe.blp for better class color support
         healthbar:SetStatusBarTexture(
@@ -5874,8 +5894,8 @@ function unitframe.ChangePartyFrame()
         manabar:ClearAllPoints()
         manabar:SetPoint('TOPLEFT', 41, -30)
 
-        -- FIXED: Set same frame level as health bar - both are functional elements
-        manabar:SetFrameLevel(5)
+        -- FIXED: Set frame level consistent with health bar
+        manabar:SetFrameLevel(3)
 
         -- Use uipartyframe.blp with coordinates for mana bar (3.3.5a compatible)
         manabar:SetStatusBarTexture('Interface\\AddOns\\DragonUI\\Textures\\Partyframe\\uipartyframe')
@@ -6046,9 +6066,44 @@ function unitframe.ChangePartyFrame()
     if not unitframe.PartyEventFrame then
         local eventFrame = CreateFrame('Frame')
         eventFrame:RegisterEvent('PARTY_MEMBERS_CHANGED')
-        eventFrame:RegisterEvent('GROUP_ROSTER_UPDATE') -- More reliable event
+        eventFrame:RegisterEvent('PARTY_MEMBER_ENABLE')
+        eventFrame:RegisterEvent('PARTY_MEMBER_DISABLE')
         eventFrame:RegisterEvent('PLAYER_ENTERING_WORLD')
+        -- FIXED: Add raid detection to handle Compact Raid Frames conflicts
+        eventFrame:RegisterEvent('RAID_ROSTER_UPDATE')
+        eventFrame:RegisterEvent('PARTY_CONVERTED_TO_RAID')
         eventFrame:SetScript('OnEvent', function(self, event, ...)
+            -- FIXED: Only update if we actually have party members or the event affects existing members
+            if event == 'PLAYER_ENTERING_WORLD' then
+                -- Always update on entering world
+            elseif event == 'RAID_ROSTER_UPDATE' or event == 'PARTY_CONVERTED_TO_RAID' then
+                -- FIXED: Hide our party frames when in raid mode to avoid conflicts with Compact Raid Frames
+                if GetNumRaidMembers() > 0 then
+                    if unitframe.PartyMoveFrame then
+                        unitframe.PartyMoveFrame:Hide()
+                    end
+                    return -- Don't update party frames in raid mode
+                else
+                    if unitframe.PartyMoveFrame then
+                        unitframe.PartyMoveFrame:Show()
+                    end
+                end
+            elseif event == 'PARTY_MEMBERS_CHANGED' or event == 'PARTY_MEMBER_ENABLE' or event == 'PARTY_MEMBER_DISABLE' then
+                -- Only update if we actually have party members
+                local hasPartyMembers = false
+                for i = 1, 4 do
+                    if UnitExists('party' .. i) then
+                        hasPartyMembers = true
+                        break
+                    end
+                end
+                
+                -- Skip update if no party members (someone just declined invitation)
+                if not hasPartyMembers then
+                    return
+                end
+            end
+            
             -- FIXED: Use WoW 3.3.5a compatible timer instead of C_Timer.After
             local updateFrame = CreateFrame("Frame")
             local updateTime = 0
@@ -6097,7 +6152,7 @@ function unitframe:UpdatePartyState(state)
 
     -- ✅ CORRECCIÓN: Lógica de carga robusta que respeta el 'override'.
     local partyConfig = addon:GetConfigValue("unitframe", "party") or {}
-    
+
     -- Determinar los valores a usar basados en el override.
     local anchor, parent, anchorPoint, x, y
     if partyConfig.override then
@@ -6148,7 +6203,7 @@ function unitframe:UpdatePartyState(state)
 
     -- Actualizar las barras de los miembros del grupo.
     for i = 1, 4 do
-        if UnitExists("party"..i) then
+        if UnitExists("party" .. i) then
             unitframe.UpdatePartyHPBar(i)
             unitframe.UpdatePartyManaBar(i)
         end
@@ -6194,7 +6249,7 @@ end
 function unitframe.ClearPartyFrameTexts(i)
     local healthbar = _G['PartyMemberFrame' .. i .. 'HealthBar']
     local manabar = _G['PartyMemberFrame' .. i .. 'ManaBar']
-    
+
     if healthbar then
         if healthbar.DFTextString then
             healthbar.DFTextString:Hide()
@@ -6206,7 +6261,7 @@ function unitframe.ClearPartyFrameTexts(i)
             healthbar.DFRightText:Hide()
         end
     end
-    
+
     if manabar then
         if manabar.DFTextString then
             manabar.DFTextString:Hide()
@@ -6225,13 +6280,13 @@ function unitframe.UpdatePartyFrameText(i)
     if not i or type(i) ~= "number" or i < 1 or i > 4 then
         return
     end
-    
+
     -- Verificar estado de la unidad
     if not UnitExists('party' .. i) or UnitIsDeadOrGhost('party' .. i) then
         unitframe.ClearPartyFrameTexts(i)
         return
     end
-    
+
     -- Verificar conexión
     if UnitIsPlayer('party' .. i) and UnitIsConnected and not UnitIsConnected('party' .. i) then
         unitframe.ClearPartyFrameTexts(i)
@@ -6294,7 +6349,7 @@ function unitframe.UpdatePartyFrameText(i)
 
         if showHealthText and health and maxHealth and maxHealth > 0 then
             local healthText = FormatStatusText(health, maxHealth, textFormat, useBreakup)
-            
+
             if textFormat == 'both' and type(healthText) == 'table' then
                 -- ✅ Para formato "both": usar elementos izquierda/derecha, OCULTAR el principal
                 healthbar.DFTextString:SetText("")
@@ -6332,7 +6387,7 @@ function unitframe.UpdatePartyFrameText(i)
 
         if showManaText and power and maxPower and maxPower > 0 then
             local powerText = FormatStatusText(power, maxPower, textFormat, useBreakup)
-            
+
             if textFormat == 'both' and type(powerText) == 'table' then
                 -- ✅ Para formato "both": usar elementos izquierda/derecha, OCULTAR el principal
                 manabar.DFTextString:SetText("")
@@ -6419,13 +6474,13 @@ function unitframe.EnsurePartyFrameLayerOrder(index)
     local manaBar = _G['PartyMemberFrame' .. index .. 'ManaBar']
 
     -- FIXED: Set correct frame levels per WoW 3.3.5a layering system
-    -- Border is on BORDER DrawLayer, functional elements should be above it
+    -- Use lower levels to avoid conflicts with other addons like Compact Raid Frames
     if healthBar then
-        healthBar:SetFrameLevel(5)
+        healthBar:SetFrameLevel(3)
     end
 
     if manaBar then
-        manaBar:SetFrameLevel(5)
+        manaBar:SetFrameLevel(3)
     end
 
     -- Don't force alpha changes - causes flicker
@@ -7177,27 +7232,115 @@ function eventFrame:OnEvent(event, arg1)
 
     elseif event == 'UNIT_POWER_UPDATE' then
 
-        elseif event == "PARTY_MEMBERS_CHANGED" or event == "GROUP_ROSTER_UPDATE" then
-        -- SOLUCIÓN SIMPLE: Llamar a la función que ya existe pero no se usa
-        for i = 1, 4 do
-            local pf = _G['PartyMemberFrame' .. i]
-            if pf then
-                if not UnitExists('party' .. i) then
-                    -- ESTO YA EXISTE en UpdatePartyState pero no se llama aquí
-                    pf:Hide()
-                    pf:SetAlpha(0)
-                    unitframe.ClearPartyFrameTexts(i)
-                else
+    elseif event == "PARTY_MEMBERS_CHANGED" then
+    -- ✅ CORRECCIÓN: Cargar la configuración party ANTES de usarla
+    local partyConfig = addon:GetConfigValue("unitframe", "party") or {}
+    
+    local inCombat = InCombatLockdown()
+    
+    -- Inicializar party frames si no existen
+    if not unitframe.PartyMoveFrame and not inCombat then
+        unitframe.ChangePartyFrame()
+    end
+    
+    -- ✅ CRÍTICO: Mostrar/ocultar según si hay miembros
+    if unitframe.PartyMoveFrame then
+        if GetNumPartyMembers() > 0 then
+            -- HAY PARTY: Mostrar el frame y configurarlo
+            unitframe.PartyMoveFrame:Show()
+            unitframe:UpdatePartyState(partyConfig)
+        else
+            -- NO HAY PARTY: Ocultar el frame
+            unitframe.PartyMoveFrame:Hide()
+        end
+    end
+    
+    -- Actualizar cada frame individual
+    for i = 1, 4 do
+        local pf = _G['PartyMemberFrame' .. i]
+        if pf then
+            if UnitExists('party' .. i) then
+                if not inCombat then
                     pf:Show()
                     pf:SetAlpha(1)
-                    unitframe.UpdatePartyHPBar(i)
-                    unitframe.UpdatePartyManaBar(i)
+                end
+                unitframe.UpdatePartyHPBar(i)
+                unitframe.UpdatePartyManaBar(i)
+                unitframe.UpdatePartyFrameText(i)
+            else
+                unitframe.ClearPartyFrameTexts(i)
+                if not inCombat then
+                    pf:Hide()
+                    pf:SetAlpha(0)
+                end
+            end
+        end
+    end
+        
+        -- Solo reconfigurar posiciones fuera de combate
+        if not inCombat then
+            local partyConfig = addon:GetConfigValue("unitframe", "party") or {}
+            if unitframe.PartyMoveFrame then
+                unitframe:UpdatePartyState(partyConfig)
+            end
+        end
+        
+    elseif event == "PARTY_MEMBER_DISABLE" then
+        -- ✅ MIEMBRO OFFLINE: Actualizar frame específico
+        for i = 1, 4 do
+            if UnitExists('party' .. i) then
+                if UnitIsConnected and not UnitIsConnected('party' .. i) then
+                    -- Miembro offline: mostrar como desconectado
+                    unitframe.ClearPartyFrameTexts(i)
+                    local pf = _G['PartyMemberFrame' .. i]
+                    if pf then
+                        pf:SetAlpha(0.5) -- Semi-transparente para offline
+                    end
+                else
+                    -- Miembro online: restaurar normal
                     unitframe.UpdatePartyFrameText(i)
+                    local pf = _G['PartyMemberFrame' .. i]
+                    if pf then
+                        pf:SetAlpha(1.0)
+                    end
                 end
             end
         end
         
-        -- El código del focus ya funciona bien
+    elseif event == "PARTY_MEMBER_ENABLE" then
+        -- ✅ MIEMBRO ONLINE: Restaurar frame específico
+        for i = 1, 4 do
+            if UnitExists('party' .. i) and UnitIsConnected('party' .. i) then
+                unitframe.UpdatePartyHPBar(i)
+                unitframe.UpdatePartyManaBar(i)
+                unitframe.UpdatePartyFrameText(i)
+                local pf = _G['PartyMemberFrame' .. i]
+                if pf then
+                    pf:SetAlpha(1.0)
+                end
+            end
+        end
+        
+    elseif event == "PARTY_CONVERTED_TO_RAID" then
+        -- ✅ CONVERTIDO A RAID: Ocultar party frames
+        for i = 1, 4 do
+            local pf = _G['PartyMemberFrame' .. i]
+            if pf then
+                pf:Hide()
+                pf:SetAlpha(0)
+                unitframe.ClearPartyFrameTexts(i)
+            end
+        end
+        
+    elseif event == "PARTY_LEADER_CHANGED" then
+        -- ✅ LIDER CAMBIADO: Actualizar iconos de liderazgo
+        for i = 1, 4 do
+            if UnitExists('party' .. i) then
+                unitframe.UpdatePartyFrameText(i) -- Actualizar para refrescar iconos
+            end
+        end
+        
+        -- Focus frame handling (mantener código existente)
         if UnitExists('focus') then
             local shouldUseClassColor = addon:GetConfigValue("unitframe", "focus", "classcolor") and UnitIsPlayer('focus')
             if shouldUseClassColor then
@@ -7256,12 +7399,17 @@ function eventFrame:OnEvent(event, arg1)
         unitframe.ChangePlayerframe()
         unitframe.ChangeTargetFrame()
         unitframe.ReApplyTargetFrame()
-        unitframe.ReApplyToTFrame() -- FIXED: Use correct function name
+        unitframe.ReApplyToTFrame()
         unitframe.ChangeStatusIcons()
         unitframe.CreateRestFlipbook()
         unitframe.ChangeFocusFrame()
         unitframe.ChangeFocusToT()
         unitframe.ChangePetFrame()
+
+        --  CRÍTICO: Forzar inicialización de party frames en primer login
+        if not unitframe.PartyMoveFrame then
+            unitframe.ChangePartyFrame()
+        end
 
         unitframe:ApplySettings()
 
@@ -7306,7 +7454,7 @@ function eventFrame:OnEvent(event, arg1)
         if PlayerFrame_UpdateStatus then
             PlayerFrame_UpdateStatus()
         end
-    -- NUEVOS EVENTOS PARA MANEJAR MUERTE/RESURRECCIÓN
+        -- NUEVOS EVENTOS PARA MANEJAR MUERTE/RESURRECCIÓN
     elseif event == 'PLAYER_DEAD' then
         HandleUnitDeath("player")
     elseif event == 'PLAYER_ALIVE' or event == 'PLAYER_UNGHOST' then
@@ -7337,24 +7485,27 @@ eventFrame:SetScript('OnEvent', eventFrame.OnEvent)
 -- Register all events needed for unit frame updates
 ------------------------------------------
 -- Register core events for all unit frames
-eventFrame:RegisterEvent('UNIT_HEALTH') 
-eventFrame:RegisterEvent('UNIT_MANA') 
-eventFrame:RegisterEvent('UNIT_MAXMANA') 
+eventFrame:RegisterEvent('UNIT_HEALTH')
+eventFrame:RegisterEvent('UNIT_MANA')
+eventFrame:RegisterEvent('UNIT_MAXMANA')
 eventFrame:RegisterEvent('UNIT_POWER_UPDATE')
 eventFrame:RegisterEvent('PLAYER_ENTERING_WORLD')
 eventFrame:RegisterEvent('PLAYER_TARGET_CHANGED')
 eventFrame:RegisterEvent('PLAYER_FOCUS_CHANGED')
-eventFrame:RegisterEvent('UNIT_EXITED_VEHICLE') 
+eventFrame:RegisterEvent('UNIT_EXITED_VEHICLE')
 eventFrame:RegisterEvent('ZONE_CHANGED')
-eventFrame:RegisterEvent('ZONE_CHANGED_INDOORS') 
-eventFrame:RegisterEvent('ZONE_CHANGED_NEW_AREA') 
-eventFrame:RegisterEvent('PLAYER_UPDATE_RESTING') 
+eventFrame:RegisterEvent('ZONE_CHANGED_INDOORS')
+eventFrame:RegisterEvent('ZONE_CHANGED_NEW_AREA')
+eventFrame:RegisterEvent('PLAYER_UPDATE_RESTING')
 eventFrame:RegisterEvent('PLAYER_DEAD')
 eventFrame:RegisterEvent('PLAYER_ALIVE')
 eventFrame:RegisterEvent('PLAYER_UNGHOST')
 eventFrame:RegisterEvent('UNIT_CONNECTION')
 eventFrame:RegisterEvent('PARTY_MEMBERS_CHANGED')
-eventFrame:RegisterEvent('GROUP_ROSTER_UPDATE')
+eventFrame:RegisterEvent('PARTY_MEMBER_DISABLE')
+eventFrame:RegisterEvent('PARTY_MEMBER_ENABLE')  
+eventFrame:RegisterEvent('PARTY_CONVERTED_TO_RAID')
+eventFrame:RegisterEvent('PARTY_LEADER_CHANGED')
 
 -- Module initialization compatible with DragonUI
 local frameInit = CreateFrame("Frame")
@@ -7946,3 +8097,5 @@ profileCallbackFrame:SetScript("OnEvent", function(self, event, addonName)
         self:UnregisterEvent("ADDON_LOADED")
     end
 end)
+
+
