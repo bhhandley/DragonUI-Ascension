@@ -203,14 +203,7 @@ local function FormatStatusText(current, maximum, textFormat, useBreakup, frameT
             elseif current == playerHealth then
                 frameType = "player"
             else
-                -- Check for party members
-                for i = 1, 4 do
-                    local partyHealth = UnitExists("party" .. i) and UnitHealth("party" .. i) or 0
-                    if current == partyHealth and partyHealth > 0 then
-                        frameType = "party"
-                        break
-                    end
-                end
+                -- Check for party members-> moved to party block
             end
 
             local config = addon.db.profile.unitframe[frameType]
@@ -696,47 +689,7 @@ end
 local optionsToT = CreateCompactFrameOptions('Target of Target', 'Target of Target Frame configuration', 'tot')
 local optionsFoT = CreateCompactFrameOptions('Focus of Target', 'Focus of Target Frame configuration', 'fot')
 
--- Party frame options (more complete than ToT/FoT but based on the same pattern)
-local optionsParty = CreateUnitFrameOptions('Party', 'Party frame settings', 'party')
 
--- Add party-specific options
--- Party frames need additional layout options not required by individual unit frames
-optionsParty.args.showHealthTextAlways = {
-    type = 'toggle',
-    name = 'Always Show Health Text',
-    desc = 'Always display health text (otherwise only on mouseover)',
-    order = 15.3
-}
-optionsParty.args.showManaTextAlways = {
-    type = 'toggle',
-    name = 'Always Show Mana Text',
-    desc = 'Always display mana/energy/rage text (otherwise only on mouseover)',
-    order = 15.4
-}
-optionsParty.args.configLayout = {
-    type = 'header',
-    name = 'Layout',
-    order = 40
-}
-optionsParty.args.orientation = {
-    type = 'select',
-    name = 'Orientation',
-    desc = 'Party frame orientation',
-    values = {
-        ['vertical'] = 'Vertical',
-        ['horizontal'] = 'Horizontal'
-    },
-    order = 40.1
-}
-optionsParty.args.padding = {
-    type = 'range',
-    name = 'Padding',
-    desc = 'Space between party frames',
-    min = 0,
-    max = 50,
-    step = 1,
-    order = 40.2
-}
 
 local options = {
     type = 'group',
@@ -5634,6 +5587,65 @@ end
 -- START OF PARTY FRAMES MODULE
 -- This section contains all functions and logic related to Party Frames
 -- ====================================================================
+
+-- Party frame options 
+local optionsParty = CreateUnitFrameOptions('Party', 'Party frame settings', 'party')
+
+-- Party frames need additional layout options not required by individual unit frames
+optionsParty.args.showHealthTextAlways = {
+    type = 'toggle',
+    name = 'Always Show Health Text',
+    desc = 'Always display health text (otherwise only on mouseover)',
+    order = 15.3
+}
+optionsParty.args.showManaTextAlways = {
+    type = 'toggle',
+    name = 'Always Show Mana Text',
+    desc = 'Always display mana/energy/rage text (otherwise only on mouseover)',
+    order = 15.4
+}
+optionsParty.args.configLayout = {
+    type = 'header',
+    name = 'Layout',
+    order = 40
+}
+optionsParty.args.orientation = {
+    type = 'select',
+    name = 'Orientation',
+    desc = 'Party frame orientation',
+    values = {
+        ['vertical'] = 'Vertical',
+        ['horizontal'] = 'Horizontal'
+    },
+    order = 40.1
+}
+optionsParty.args.padding = {
+    type = 'range',
+    name = 'Padding',
+    desc = 'Space between party frames',
+    min = 0,
+    max = 50,
+    step = 1,
+    order = 40.2
+}
+
+-- MOVED: Safe party detection function (avoids taint)
+local function GetPartyFrameType(current)
+    -- Only check if we actually have party members to avoid unnecessary loops
+    if GetNumPartyMembers() == 0 then
+        return nil
+    end
+    
+    for i = 1, 4 do
+        if UnitExists("party" .. i) then
+            local partyHealth = UnitHealth("party" .. i)
+            if current == partyHealth and partyHealth > 0 then
+                return "party"
+            end
+        end
+    end
+    return nil
+end
 
 -- Manual function to force party frame initialization
 function unitframe.ForceInitPartyFrames()
