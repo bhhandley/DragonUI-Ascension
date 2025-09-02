@@ -5623,6 +5623,18 @@ function unitframe.HookFunctions()
     end
 end
 
+-- ====================================================================
+-- ██████╗  █████╗ ██████╗ ████████╗██╗   ██╗    ███████╗██████╗  █████╗ ███╗   ███╗███████╗███████╗
+-- ██╔══██╗██╔══██╗██╔══██╗╚══██╔══╝╚██╗ ██╔╝    ██╔════╝██╔══██╗██╔══██╗████╗ ████║██╔════╝██╔════╝
+-- ██████╔╝███████║██████╔╝   ██║    ╚████╔╝     █████╗  ██████╔╝███████║██╔████╔██║█████╗  ███████╗
+-- ██╔═══╝ ██╔══██║██╔══██╗   ██║     ╚██╔╝      ██╔══╝  ██╔══██╗██╔══██║██║╚██╔╝██║██╔══╝  ╚════██║
+-- ██║     ██║  ██║██║  ██║   ██║      ██║       ██║     ██║  ██║██║  ██║██║ ╚═╝ ██║███████╗███████║
+-- ╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝      ╚═╝       ╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝     ╚═╝╚══════╝╚══════╝
+-- ====================================================================
+-- START OF PARTY FRAMES MODULE
+-- This section contains all functions and logic related to Party Frames
+-- ====================================================================
+
 -- Manual function to force party frame initialization
 function unitframe.ForceInitPartyFrames()
 
@@ -6736,6 +6748,18 @@ function unitframe.SetPartyManaBarCoords(manabar, powerType, currentPower, maxPo
     manabar:SetStatusBarColor(color[1], color[2], color[3], color[4])
 end
 
+-- ====================================================================
+-- ███████╗███╗   ██╗██████╗      ██████╗ ███████╗    ██████╗  █████╗ ██████╗ ████████╗██╗   ██╗    ███████╗██████╗  █████╗ ███╗   ███╗███████╗███████╗
+-- ██╔════╝████╗  ██║██╔══██╗    ██╔═══██╗██╔════╝    ██╔══██╗██╔══██╗██╔══██╗╚══██╔══╝╚██╗ ██╔╝    ██╔════╝██╔══██╗██╔══██╗████╗ ████║██╔════╝██╔════╝
+-- █████╗  ██╔██╗ ██║██║  ██║    ██║   ██║█████╗      ██████╔╝███████║██████╔╝   ██║    ╚████╔╝     █████╗  ██████╔╝███████║██╔████╔██║█████╗  ███████╗
+-- ██╔══╝  ██║╚██╗██║██║  ██║    ██║   ██║██╔══╝      ██╔═══╝ ██╔══██║██╔══██╗   ██║     ╚██╔╝      ██╔══╝  ██╔══██╗██╔══██║██║╚██╔╝██║██╔══╝  ╚════██║
+-- ███████╗██║ ╚████║██████╔╝    ╚██████╔╝██║         ██║     ██║  ██║██║  ██║   ██║      ██║       ██║     ██║  ██║██║  ██║██║ ╚═╝ ██║███████╗███████║
+-- ╚══════╝╚═╝  ╚═══╝╚═════╝      ╚═════╝ ╚═╝         ╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝      ╚═╝       ╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝     ╚═╝╚══════╝╚══════╝
+-- ====================================================================
+-- END OF PARTY FRAMES MODULE
+-- All Party Frame related functions end here
+-- ====================================================================
+
 -- FIXED: Enhanced Pet Frame function with full configuration support
 function unitframe.ChangePetFrame()
 
@@ -6775,7 +6799,6 @@ function unitframe.ChangePetFrame()
         PetFrame:SetPoint('TOPLEFT', PlayerFrame, 'TOPLEFT', 100, -70)
     end
 
-    -- ...existing code...
     PetFrameTexture:SetTexture('')
     PetFrameTexture:Hide()
 
@@ -7212,7 +7235,7 @@ end
 
 ------------------------------------------
 -- Event Handling System
--- Handles all events for unit frame updates and state changes
+-- Handles all events for unit frame updates and state changes *Except PARTY FRAMES
 ------------------------------------------
 local eventFrame = CreateFrame("Frame")
 
@@ -7227,125 +7250,9 @@ function eventFrame:OnEvent(event, arg1)
     if event == 'UNIT_POWER_UPDATE' and arg1 == 'focus' then
         unitframe.UpdateFocusText()
     elseif event == 'UNIT_POWER_UPDATE' and arg1 == 'pet' then
-    elseif event == 'UNIT_POWER_UPDATE' and string.match(arg1, '^party[1-4]$') then
-        -- Update party frame text when power changes
-        local partyIndex = tonumber(string.match(arg1, 'party([1-4])'))
-        if partyIndex then
-            -- Ensure mouseover scripts are set up
-            unitframe.InitializePartyFrameMouseover()
-            unitframe.UpdatePartyFrameText(partyIndex)
-            unitframe.UpdatePartyManaBar(partyIndex)
-        end
 
     elseif event == 'UNIT_POWER_UPDATE' then
 
-    elseif event == "PARTY_MEMBERS_CHANGED" then
-        -- ✅ CORRECCIÓN: Cargar la configuración party ANTES de usarla
-        local partyConfig = addon:GetConfigValue("unitframe", "party") or {}
-
-        local inCombat = InCombatLockdown()
-
-        -- Inicializar party frames si no existen
-        if not unitframe.PartyMoveFrame and not inCombat then
-            unitframe.ChangePartyFrame()
-        end
-
-        -- ✅ CRÍTICO: Mostrar/ocultar según si hay miembros
-        if unitframe.PartyMoveFrame then
-            if GetNumPartyMembers() > 0 then
-                -- HAY PARTY: Mostrar el frame y configurarlo
-                unitframe.PartyMoveFrame:Show()
-                unitframe:UpdatePartyState(partyConfig)
-            else
-                -- NO HAY PARTY: Ocultar el frame
-                unitframe.PartyMoveFrame:Hide()
-            end
-        end
-
-        -- Actualizar cada frame individual
-        for i = 1, 4 do
-            local pf = _G['PartyMemberFrame' .. i]
-            if pf then
-                if UnitExists('party' .. i) then
-                    if not inCombat then
-                        pf:Show()
-                        pf:SetAlpha(1)
-                    end
-                    unitframe.UpdatePartyHPBar(i)
-                    unitframe.UpdatePartyManaBar(i)
-                    unitframe.UpdatePartyFrameText(i)
-                else
-                    unitframe.ClearPartyFrameTexts(i)
-                    if not inCombat then
-                        pf:Hide()
-                        pf:SetAlpha(0)
-                    end
-                end
-            end
-        end
-
-        -- Solo reconfigurar posiciones fuera de combate
-        if not inCombat then
-            local partyConfig = addon:GetConfigValue("unitframe", "party") or {}
-            if unitframe.PartyMoveFrame then
-                unitframe:UpdatePartyState(partyConfig)
-            end
-        end
-
-    elseif event == "PARTY_MEMBER_DISABLE" then
-        -- ✅ MIEMBRO OFFLINE: Actualizar frame específico
-        for i = 1, 4 do
-            if UnitExists('party' .. i) then
-                if UnitIsConnected and not UnitIsConnected('party' .. i) then
-                    -- Miembro offline: mostrar como desconectado
-                    unitframe.ClearPartyFrameTexts(i)
-                    local pf = _G['PartyMemberFrame' .. i]
-                    if pf then
-                        pf:SetAlpha(0.5) -- Semi-transparente para offline
-                    end
-                else
-                    -- Miembro online: restaurar normal
-                    unitframe.UpdatePartyFrameText(i)
-                    local pf = _G['PartyMemberFrame' .. i]
-                    if pf then
-                        pf:SetAlpha(1.0)
-                    end
-                end
-            end
-        end
-
-    elseif event == "PARTY_MEMBER_ENABLE" then
-        -- ✅ MIEMBRO ONLINE: Restaurar frame específico
-        for i = 1, 4 do
-            if UnitExists('party' .. i) and UnitIsConnected('party' .. i) then
-                unitframe.UpdatePartyHPBar(i)
-                unitframe.UpdatePartyManaBar(i)
-                unitframe.UpdatePartyFrameText(i)
-                local pf = _G['PartyMemberFrame' .. i]
-                if pf then
-                    pf:SetAlpha(1.0)
-                end
-            end
-        end
-
-    elseif event == "PARTY_CONVERTED_TO_RAID" then
-        -- ✅ CONVERTIDO A RAID: Ocultar party frames
-        for i = 1, 4 do
-            local pf = _G['PartyMemberFrame' .. i]
-            if pf then
-                pf:Hide()
-                pf:SetAlpha(0)
-                unitframe.ClearPartyFrameTexts(i)
-            end
-        end
-
-    elseif event == "PARTY_LEADER_CHANGED" then
-        -- ✅ LIDER CAMBIADO: Actualizar iconos de liderazgo
-        for i = 1, 4 do
-            if UnitExists('party' .. i) then
-                unitframe.UpdatePartyFrameText(i) -- Actualizar para refrescar iconos
-            end
-        end
 
         -- Focus frame handling (mantener código existente)
         if UnitExists('focus') then
@@ -7366,21 +7273,7 @@ function eventFrame:OnEvent(event, arg1)
                 FocusFrameManaBar:SetStatusBarColor(1, 1, 1, 1)
             end
         end
-        -- WoW 3.3.5a specific mana events
-    elseif event == 'UNIT_MANA' and string.match(arg1, '^party[1-4]$') then
-        -- Update party frame mana when mana changes (3.3.5a specific)
-        local partyIndex = tonumber(string.match(arg1, 'party([1-4])'))
-        if partyIndex then
-            unitframe.UpdatePartyFrameText(partyIndex)
-            unitframe.UpdatePartyManaBar(partyIndex)
-        end
-    elseif event == 'UNIT_MAXMANA' and string.match(arg1, '^party[1-4]$') then
-        -- Update party frame mana when max mana changes (3.3.5a specific)
-        local partyIndex = tonumber(string.match(arg1, 'party([1-4])'))
-        if partyIndex then
-            unitframe.UpdatePartyFrameText(partyIndex)
-            unitframe.UpdatePartyManaBar(partyIndex)
-        end
+
     elseif event == 'UNIT_HEALTH' and arg1 then
         -- NUEVO: Verificar si la unidad murió PRIMERO
         if UnitIsDeadOrGhost(arg1) then
@@ -7389,16 +7282,13 @@ function eventFrame:OnEvent(event, arg1)
             -- Código existente para unidades vivas
             if arg1 == 'focus' then
                 unitframe.UpdateFocusText()
-            elseif string.match(arg1, '^party[1-4]$') then
-                -- Update party frame text when health changes
-                local partyIndex = tonumber(string.match(arg1, 'party([1-4])'))
-                if partyIndex then
-                    -- Ensure mouseover scripts are set up
-                    unitframe.InitializePartyFrameMouseover()
-                    unitframe.UpdatePartyFrameText(partyIndex)
-                end
+
+                -- Ensure mouseover scripts are set up
+                unitframe.InitializePartyFrameMouseover()
+
             end
         end
+
     elseif event == 'PLAYER_FOCUS_CHANGED' then
         unitframe.ReApplyFocusFrame()
         unitframe.UpdateFocusText()
@@ -7478,11 +7368,7 @@ function eventFrame:OnEvent(event, arg1)
             end
         elseif arg1 == "focus" then
             unitframe.UpdateFocusText()
-        elseif string.match(arg1, "^party[1-4]$") then
-            local partyIndex = tonumber(string.match(arg1, 'party([1-4])'))
-            if partyIndex then
-                unitframe.UpdatePartyFrameText(partyIndex)
-            end
+        
         end
     end
 end
@@ -7509,11 +7395,7 @@ eventFrame:RegisterEvent('PLAYER_DEAD')
 eventFrame:RegisterEvent('PLAYER_ALIVE')
 eventFrame:RegisterEvent('PLAYER_UNGHOST')
 eventFrame:RegisterEvent('UNIT_CONNECTION')
-eventFrame:RegisterEvent('PARTY_MEMBERS_CHANGED')
-eventFrame:RegisterEvent('PARTY_MEMBER_DISABLE')
-eventFrame:RegisterEvent('PARTY_MEMBER_ENABLE')
-eventFrame:RegisterEvent('PARTY_CONVERTED_TO_RAID')
-eventFrame:RegisterEvent('PARTY_LEADER_CHANGED')
+
 
 -- Module initialization compatible with DragonUI
 local frameInit = CreateFrame("Frame")
