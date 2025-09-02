@@ -5704,6 +5704,7 @@ function unitframe.DoPartyFrameReconfiguration()
     end
 end
 
+-- BEGINNING PARTY FRAMES
 -- Party Frames Implementation
 function unitframe.ChangePartyFrame()
     -- Create main container frame for party frames
@@ -6149,6 +6150,7 @@ function unitframe.ChangePartyFrame()
     end
 end
 
+-- END PARTY FRAMES
 -- Function to update party state (position, scale, orientation)
 function unitframe:UpdatePartyState(state)
     if not unitframe.PartyMoveFrame then
