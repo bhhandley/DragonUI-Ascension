@@ -174,6 +174,9 @@ MiniMapTrackingButtonShine:SetPoint('CENTER', MiniMapTrackingButton)
 MiniMapTrackingButtonBorder:SetTexture(nil)
 MiniMapTrackingBackground:SetTexture(nil)
 
+-- Enable right-click on the tracking button
+MiniMapTrackingButton:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+
 local function Tracking_Update()
     local texture = GetTrackingTexture();
     -- Use dynamic config if available, fallback to static config
@@ -231,6 +234,19 @@ local function Tracking_Update()
 end
 Tracking_Update();
 MiniMapTrackingButton:HookScript('OnEvent', Tracking_Update)
+
+-- Add right-click functionality to clear tracking
+MiniMapTrackingButton:SetScript("OnClick", function(self, button)
+    if button == "RightButton" then
+        -- Set tracking to none
+        SetTracking()
+        -- Update the tracking display
+        Tracking_Update()
+    else
+        -- left-click behavior
+        ToggleDropDownMenu(1, nil, MiniMapTrackingDropDown, "MiniMapTrackingButton", 0, -5)
+    end
+end)
 
 -- LFG update
 if (not IsAddOnLoaded('pretty_actionbar')) then
