@@ -5588,6 +5588,21 @@ end
 -- This section contains all functions and logic related to Party Frames
 -- ====================================================================
 
+-- MOVED: Party frames initialization system
+if not unitframe.PartyEventFrameMain then
+    local partyMainEventFrame = CreateFrame('Frame')
+    partyMainEventFrame:RegisterEvent('PLAYER_ENTERING_WORLD')
+    partyMainEventFrame:SetScript('OnEvent', function(self, event, ...)
+        if event == 'PLAYER_ENTERING_WORLD' then
+            --  CRÍTICO: Forzar inicialización de party frames en primer login
+            if not unitframe.PartyMoveFrame then
+                unitframe.ChangePartyFrame()
+            end
+        end
+    end)
+    unitframe.PartyEventFrameMain = partyMainEventFrame
+end
+
 -- Party frame options 
 local optionsParty = CreateUnitFrameOptions('Party', 'Party frame settings', 'party')
 
@@ -5647,30 +5662,7 @@ local function GetPartyFrameType(current)
     return nil
 end
 
--- Manual function to force party frame initialization
-function unitframe.ForceInitPartyFrames()
 
-    -- Force show party frames first
-    for i = 1, 4 do
-        local pf = _G['PartyMemberFrame' .. i]
-        if pf then
-            pf:Show()
-            pf:SetAlpha(1)
-        end
-    end
-
-    -- Initialize our custom party frames
-    if not unitframe.PartyMoveFrame then
-        unitframe.ChangePartyFrame()
-    end
-
-    -- Apply settings
-    local partySettings = addon:GetConfigValue("unitframe", "party")
-    if partySettings and unitframe.PartyMoveFrame then
-        unitframe:UpdatePartyState(partySettings)
-    end
-
-end
 
 -- Function to reconfigure party frames on reload without recreating them
 function unitframe.ReconfigurePartyFramesForReload()
@@ -7315,11 +7307,6 @@ function eventFrame:OnEvent(event, arg1)
         unitframe.ChangeFocusFrame()
         unitframe.ChangeFocusToT()
         unitframe.ChangePetFrame()
-
-        --  CRÍTICO: Forzar inicialización de party frames en primer login
-        if not unitframe.PartyMoveFrame then
-            unitframe.ChangePartyFrame()
-        end
 
         unitframe:ApplySettings()
 
