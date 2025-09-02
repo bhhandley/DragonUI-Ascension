@@ -5720,9 +5720,21 @@ function unitframe.DoPartyFrameReconfiguration()
     end
 end
 
--- BEGINNING PARTY FRAMES
--- Party Frames Implementation
+
+-- ====================================================================
+-- REFACTORED PARTY FRAMES SYSTEM
+-- Divided into smaller, manageable functions for better maintainability
+-- ====================================================================
+
+-- Main coordinator function
 function unitframe.ChangePartyFrame()
+    unitframe.CreatePartyContainer()
+    unitframe.SetupAllPartyFrames()
+    unitframe.RegisterPartyEvents()
+end
+
+-- Creates the main container frame for party frames
+function unitframe.CreatePartyContainer()
     -- Create main container frame for party frames
     local PartyMoveFrame = CreateFrame('Frame', 'DragonUIPartyMoveFrame', UIParent)
     -- FIXED: Use BACKGROUND strata to stay behind Compact Raid Frames which use LOW/MEDIUM
@@ -5733,8 +5745,7 @@ function unitframe.ChangePartyFrame()
     PartyMoveFrame:Show() -- Force show
     unitframe.PartyMoveFrame = PartyMoveFrame
 
-    -- Ocultar frames blizzard:
-
+    -- Reparent original frames to our container
     for i = 1, 4 do
         local originalFrame = _G['PartyMemberFrame' .. i]
         if originalFrame then
@@ -5747,274 +5758,343 @@ function unitframe.ChangePartyFrame()
         end
     end
 
-    -- PartyMoveFrame created
-
-    local sizeX, sizeY = _G['PartyMemberFrame' .. 1]:GetSize()
+    -- Calculate container size and position first party frame
+    local sizeX, sizeY = _G['PartyMemberFrame1']:GetSize()
     local gap = 10
     PartyMoveFrame:SetSize(sizeX, sizeY * 4 + 3 * gap)
 
     -- Position first party frame
-    local first = _G['PartyMemberFrame' .. 1]
+    local first = _G['PartyMemberFrame1']
     first:ClearAllPoints()
     first:SetPoint('TOPLEFT', PartyMoveFrame, 'TOPLEFT', 0, 0)
+end
 
+-- Sets up all 4 party frames
+function unitframe.SetupAllPartyFrames()
     for i = 1, 4 do
-        local pf = _G['PartyMemberFrame' .. i]
-        pf:SetParent(PartyMoveFrame)
-        pf:SetSize(120, 53)
-        pf:SetHitRectInsets(0, 0, 0, 12)
-        -- DO NOT force Show() - let WoW control visibility
-        -- pf:Show() -- Comentado - causa frames fantasma
-        -- pf:SetAlpha(1) -- Comentado - dejar que WoW controle
+        unitframe.SetupSinglePartyFrame(i)
+    end
+end
 
-        -- Hide original background
-        local bg = _G['PartyMemberFrame' .. i .. 'Background']
+-- Configures a single party frame completely
+function unitframe.SetupSinglePartyFrame(i)
+    unitframe.ConfigurePartyFrameStructure(i)
+    unitframe.SetupPartyFrameTextures(i)
+    unitframe.SetupPartyFrameBars(i)
+    unitframe.SetupPartyFrameEvents(i)
+    unitframe.SetupPartyFrameIcons(i)
+    unitframe.SetupPartyFrameRange(i)
+    unitframe.InitializePartyFrameBars(i)
+end
+
+-- Configures basic frame structure (size, position, parent)
+function unitframe.ConfigurePartyFrameStructure(i)
+    local pf = _G['PartyMemberFrame' .. i]
+    if not pf then return end
+    
+    pf:SetParent(unitframe.PartyMoveFrame)
+    pf:SetSize(120, 53)
+    pf:SetHitRectInsets(0, 0, 0, 12)
+    -- DO NOT force Show() - let WoW control visibility
+    -- pf:Show() -- Comentado - causa frames fantasma
+    -- pf:SetAlpha(1) -- Comentado - dejar que WoW controle
+
+    -- Hide original background
+    local bg = _G['PartyMemberFrame' .. i .. 'Background']
+    if bg then
         bg:Hide()
+    end
 
-        -- Setup flash texture
-        local flash = _G['PartyMemberFrame' .. i .. 'Flash']
+    -- Hide original texture
+    local texture = _G['PartyMemberFrame' .. i .. 'Texture']
+    if texture then
+        texture:SetTexture()
+        texture:Hide()
+    end
+
+    -- Reposition name
+    local name = _G['PartyMemberFrame' .. i .. 'Name']
+    if name then
+        name:ClearAllPoints()
+        name:SetSize(57, 12)
+        name:SetPoint('TOPLEFT', 46, -6)
+    end
+
+    -- Position debuffs - IMPROVED: Handle all debuffs, not just first one
+    for debuffIndex = 1, 16 do -- Party frames can show up to 16 debuffs
+        local debuff = _G['PartyMemberFrame' .. i .. 'Debuff' .. debuffIndex]
+        if debuff then
+            debuff:ClearAllPoints()
+            -- Calculate position: first debuff at base position, others offset
+            local xOffset = 120 + ((debuffIndex - 1) % 8) * 17 -- 8 debuffs per row
+            local yOffset = -20 - (math.floor((debuffIndex - 1) / 8) * 17) -- Second row if >8 debuffs
+            debuff:SetPoint('TOPLEFT', pf, 'TOPLEFT', xOffset, yOffset)
+        end
+    end
+end
+
+-- Sets up all party frame textures (border, flash, status)
+function unitframe.SetupPartyFrameTextures(i)
+    local pf = _G['PartyMemberFrame' .. i]
+    if not pf then return end
+
+    -- Setup flash texture
+    local flash = _G['PartyMemberFrame' .. i .. 'Flash']
+    if flash then
         flash:SetSize(114, 47)
         flash:SetTexture('Interface\\AddOns\\DragonUI\\Textures\\Partyframe\\uipartyframe')
         flash:SetTexCoord(0.480469, 0.925781, 0.453125, 0.636719)
         flash:SetPoint('TOPLEFT', 1 + 1, -2)
         flash:SetVertexColor(1, 0, 0, 1)
         flash:SetDrawLayer('ARTWORK', 5)
+    end
 
-        -- Hide original texture
-        local texture = _G['PartyMemberFrame' .. i .. 'Texture']
-        texture:SetTexture()
-        texture:Hide()
+    -- Create border texture
+    if not pf.PartyFrameBorder then
+        local border = pf:CreateTexture('DragonUIPartyFrameBorder')
+        -- FIXED: Use BORDER layer as per WoW 3.3.5a documentation
+        border:SetDrawLayer('BORDER', 1)
+        border:SetSize(120, 49)
+        border:SetTexture('Interface\\AddOns\\DragonUI\\Textures\\Partyframe\\uipartyframe')
+        border:SetTexCoord(0.480469, 0.949219, 0.222656, 0.414062)
+        border:SetPoint('TOPLEFT', 1, -2)
+        pf.PartyFrameBorder = border
+    end
 
-        -- Reposition name
-        local name = _G['PartyMemberFrame' .. i .. 'Name']
-        name:ClearAllPoints()
-        name:SetSize(57, 12)
-        name:SetPoint('TOPLEFT', 46, -6)
-
-        -- Create border texture
-        if not pf.PartyFrameBorder then
-            local border = pf:CreateTexture('DragonUIPartyFrameBorder')
-            -- FIXED: Use BORDER layer as per WoW 3.3.5a documentation
-            border:SetDrawLayer('BORDER', 1)
-            border:SetSize(120, 49)
-            border:SetTexture('Interface\\AddOns\\DragonUI\\Textures\\Partyframe\\uipartyframe')
-            border:SetTexCoord(0.480469, 0.949219, 0.222656, 0.414062)
-            border:SetPoint('TOPLEFT', 1, -2)
-            pf.PartyFrameBorder = border
-        end
-
-        -- Setup status texture
-        local status = _G['PartyMemberFrame' .. i .. 'Status']
+    -- Setup status texture
+    local status = _G['PartyMemberFrame' .. i .. 'Status']
+    if status then
         status:SetSize(114, 47)
         status:SetTexture('Interface\\AddOns\\DragonUI\\Textures\\Partyframe\\uipartyframe')
         status:SetTexCoord(0.00390625, 0.472656, 0.453125, 0.644531)
         status:SetPoint('TOPLEFT', 1, -2)
         status:SetDrawLayer('BORDER', 1)
+    end
+end
 
-        -- Setup small icons positioning
-        local function updateSmallIcons()
-            local leaderIcon = _G['PartyMemberFrame' .. i .. 'LeaderIcon']
-            if leaderIcon then
-                leaderIcon:ClearAllPoints()
-                leaderIcon:SetPoint('BOTTOM', pf, 'TOP', -10, -6)
-                leaderIcon:SetSize(16, 16)
-            end
+-- Configures health and mana bars
+function unitframe.SetupPartyFrameBars(i)
+    unitframe.SetupPartyHealthBar(i)
+    unitframe.SetupPartyManaBar(i)
+end
 
-            local masterIcon = _G['PartyMemberFrame' .. i .. 'MasterIcon']
-            if masterIcon then
-                masterIcon:ClearAllPoints()
-                masterIcon:SetPoint('BOTTOM', pf, 'TOP', -10 + 16, -6)
-            end
+-- Sets up health bar specifically
+function unitframe.SetupPartyHealthBar(i)
+    local healthbar = _G['PartyMemberFrame' .. i .. 'HealthBar']
+    if not healthbar then return end
 
-            local guideIcon = _G['PartyMemberFrame' .. i .. 'GuideIcon']
-            if guideIcon then
-                guideIcon:ClearAllPoints()
-                guideIcon:SetPoint('BOTTOM', pf, 'TOP', -10, -6)
-            end
+    healthbar:SetSize(70 + 1, 10)
+    healthbar:ClearAllPoints()
+    healthbar:SetPoint('TOPLEFT', 45 - 1, -19)
 
-            local pvpIcon = _G['PartyMemberFrame' .. i .. 'PVPIcon']
-            if pvpIcon then
-                pvpIcon:ClearAllPoints()
-                pvpIcon:SetPoint('CENTER', pf, 'TOPLEFT', 7, -24)
-            end
+    -- FIXED: Set frame level to be above border layer but not excessively high
+    -- This prevents conflicts with other addons while maintaining proper layering
+    healthbar:SetFrameLevel(3)
 
-            local readyCheck = _G['PartyMemberFrame' .. i .. 'ReadyCheck']
-            if readyCheck then
-                readyCheck:ClearAllPoints()
-                readyCheck:SetPoint('CENTER', _G['PartyMemberFrame' .. i .. 'Portrait'], 'CENTER', 0, -2)
-            end
+    -- Use individual texture files instead of uipartyframe.blp for better class color support
+    healthbar:SetStatusBarTexture(
+        'Interface\\Addons\\DragonUI\\Textures\\Partyframe\\UI-HUD-UnitFrame-Party-PortraitOn-Bar-Health')
+    healthbar:SetStatusBarColor(1, 1, 1, 1)
 
-            local notPresentIcon = _G['PartyMemberFrame' .. i .. 'NotPresentIcon']
-            if notPresentIcon then
-                notPresentIcon:ClearAllPoints()
-                notPresentIcon:SetPoint('LEFT', pf, 'RIGHT', 2, -2)
-            end
-        end
-        updateSmallIcons()
-        pf.updateSmallIcons = updateSmallIcons -- Store the function for later use
+    -- Completely disable the original WoW text system
+    if healthbar.TextString then
+        healthbar.TextString:Hide()
+        healthbar.TextString:SetText("")
+    end
+    -- Desactivar también el cvar que controla el texto automático
+    healthbar.cvar = nil
+    healthbar.textLockable = 0
+    healthbar.lockShow = 0
 
-        -- Setup health bar - use individual texture system for better class color support
-        local healthbar = _G['PartyMemberFrame' .. i .. 'HealthBar']
-        healthbar:SetSize(70 + 1, 10)
-        healthbar:ClearAllPoints()
-        healthbar:SetPoint('TOPLEFT', 45 - 1, -19)
+    -- Crear nuestros elementos de texto personalizados
+    healthbar.DFTextString = healthbar.DFHealthBarText or
+                                 healthbar:CreateFontString('DragonUIHealthBarText', 'OVERLAY', 'TextStatusBarText')
+    healthbar.DFLeftText = healthbar.DFHealthBarTextLeft or
+                               healthbar:CreateFontString('DragonUIHealthBarTextLeft', 'OVERLAY', 'TextStatusBarText')
+    healthbar.DFRightText = healthbar.DFHealthBarTextRight or
+                                healthbar:CreateFontString('DragonUIHealthBarTextRight', 'OVERLAY', 'TextStatusBarText')
 
-        -- FIXED: Set frame level to be above border layer but not excessively high
-        -- This prevents conflicts with other addons while maintaining proper layering
-        healthbar:SetFrameLevel(3)
+    -- Posicionar correctamente en la barra de vida
+    healthbar.DFTextString:SetPoint('CENTER', healthbar, 'CENTER', 0, 0)
+    healthbar.DFLeftText:SetPoint('LEFT', healthbar, 'LEFT', 0, 0)
+    healthbar.DFRightText:SetPoint('RIGHT', healthbar, 'RIGHT', 0, 0)
+end
 
-        -- Use individual texture files instead of uipartyframe.blp for better class color support
-        healthbar:SetStatusBarTexture(
-            'Interface\\Addons\\DragonUI\\Textures\\Partyframe\\UI-HUD-UnitFrame-Party-PortraitOn-Bar-Health')
-        healthbar:SetStatusBarColor(1, 1, 1, 1)
+-- Sets up mana bar specifically
+function unitframe.SetupPartyManaBar(i)
+    local manabar = _G['PartyMemberFrame' .. i .. 'ManaBar']
+    if not manabar then return end
 
-        -- DEBUG: Log normal texture setup
-        local tex = healthbar:GetStatusBarTexture()
-        if tex then
-            local layer, sublayer = tex:GetDrawLayer()
-            if tex then
-            end
-        end
+    manabar:SetSize(74, 7)
+    manabar:ClearAllPoints()
+    manabar:SetPoint('TOPLEFT', 41, -30)
 
-        -- This was causing conflicts with mana bar positioning
+    -- FIXED: Set frame level consistent with health bar
+    manabar:SetFrameLevel(3)
 
-        -- Completely disable the original WoW text system
-        if healthbar.TextString then
-            healthbar.TextString:Hide()
-            healthbar.TextString:SetText("")
-        end
-        -- Desactivar también el cvar que controla el texto automático
-        healthbar.cvar = nil
-        healthbar.textLockable = 0
-        healthbar.lockShow = 0
+    -- Use uipartyframe.blp with coordinates for mana bar (3.3.5a compatible)
+    manabar:SetStatusBarTexture('Interface\\AddOns\\DragonUI\\Textures\\Partyframe\\uipartyframe')
 
-        -- Crear nuestros elementos de texto personalizados
-        healthbar.DFTextString = healthbar.DFHealthBarText or
-                                     healthbar:CreateFontString('DragonUIHealthBarText', 'OVERLAY', 'TextStatusBarText')
-        healthbar.DFLeftText = healthbar.DFHealthBarTextLeft or
-                                   healthbar:CreateFontString('DragonUIHealthBarTextLeft', 'OVERLAY',
-                'TextStatusBarText')
-        healthbar.DFRightText = healthbar.DFHealthBarTextRight or
-                                    healthbar:CreateFontString('DragonUIHealthBarTextRight', 'OVERLAY',
-                'TextStatusBarText')
+    -- Default mana bar coordinates - will be updated based on power type
+    unitframe.SetPartyManaBarCoords(manabar, 0, 1000, 1000) -- 0 = mana, default values for initialization
+    manabar:SetStatusBarColor(1, 1, 1, 1)
 
-        -- Posicionar correctamente en la barra de vida
-        healthbar.DFTextString:SetPoint('CENTER', healthbar, 'CENTER', 0, 0)
-        healthbar.DFLeftText:SetPoint('LEFT', healthbar, 'LEFT', 0, 0)
-        healthbar.DFRightText:SetPoint('RIGHT', healthbar, 'RIGHT', 0, 0)
+    -- DESACTIVAR completamente el sistema de texto original de WoW
+    if manabar.TextString then
+        manabar.TextString:Hide()
+        manabar.TextString:SetText("")
+    end
+    -- Desactivar también el cvar que controla el texto automático
+    manabar.cvar = nil
+    manabar.textLockable = 0
+    manabar.lockShow = 0
 
-        -- NO usar hooks OnEnter/OnLeave - usar sistema centralizado como el target
+    -- Crear nuestros elementos de texto personalizados
+    manabar.DFTextString = manabar.DFManaBarText or
+                               manabar:CreateFontString('DragonUIManaBarText', 'OVERLAY', 'TextStatusBarText')
+    manabar.DFLeftText = manabar.DFManaBarTextLeft or
+                             manabar:CreateFontString('DragonUIManaBarTextLeft', 'OVERLAY', 'TextStatusBarText')
+    manabar.DFRightText = manabar.DFManaBarTextRight or
+                              manabar:CreateFontString('DragonUIManaBarTextRight', 'OVERLAY', 'TextStatusBarText')
 
-        -- Setup mana bar using uipartyframe.blp coordinates  
-        local manabar = _G['PartyMemberFrame' .. i .. 'ManaBar']
-        manabar:SetSize(74, 7)
-        manabar:ClearAllPoints()
-        manabar:SetPoint('TOPLEFT', 41, -30)
+    -- Posicionar correctamente en la barra de mana
+    manabar.DFTextString:SetPoint('CENTER', manabar, 'CENTER', 1.5, 0)
+    manabar.DFLeftText:SetPoint('LEFT', manabar, 'LEFT', 3, 0)
+    manabar.DFRightText:SetPoint('RIGHT', manabar, 'RIGHT', 0, 0)
+end
 
-        -- FIXED: Set frame level consistent with health bar
-        manabar:SetFrameLevel(3)
+-- Sets up party frame icons (leader, master, pvp, etc.)
+function unitframe.SetupPartyFrameIcons(i)
+    local pf = _G['PartyMemberFrame' .. i]
+    if not pf then return end
 
-        -- Use uipartyframe.blp with coordinates for mana bar (3.3.5a compatible)
-        manabar:SetStatusBarTexture('Interface\\AddOns\\DragonUI\\Textures\\Partyframe\\uipartyframe')
-
-        -- NO cambiar el anclaje aquí - puede causar problemas de expansión
-
-        -- Default mana bar coordinates - will be updated based on power type
-        unitframe.SetPartyManaBarCoords(manabar, 0, 1000, 1000) -- 0 = mana, default values for initialization
-        manabar:SetStatusBarColor(1, 1, 1, 1)
-
-        -- DESACTIVAR completamente el sistema de texto original de WoW
-        if manabar.TextString then
-            manabar.TextString:Hide()
-            manabar.TextString:SetText("")
-        end
-        -- Desactivar también el cvar que controla el texto automático
-        manabar.cvar = nil
-        manabar.textLockable = 0
-        manabar.lockShow = 0
-
-        -- Crear nuestros elementos de texto personalizados
-        manabar.DFTextString = manabar.DFManaBarText or
-                                   manabar:CreateFontString('DragonUIManaBarText', 'OVERLAY', 'TextStatusBarText')
-        manabar.DFLeftText = manabar.DFManaBarTextLeft or
-                                 manabar:CreateFontString('DragonUIManaBarTextLeft', 'OVERLAY', 'TextStatusBarText')
-        manabar.DFRightText = manabar.DFManaBarTextRight or
-                                  manabar:CreateFontString('DragonUIManaBarTextRight', 'OVERLAY', 'TextStatusBarText')
-
-        -- Posicionar correctamente en la barra de mana
-        manabar.DFTextString:SetPoint('CENTER', manabar, 'CENTER', 1.5, 0)
-        manabar.DFLeftText:SetPoint('LEFT', manabar, 'LEFT', 3, 0)
-        manabar.DFRightText:SetPoint('RIGHT', manabar, 'RIGHT', 0, 0)
-
-        -- NO usar hooks OnEnter/OnLeave - usar sistema centralizado como el target
-
-        -- Position debuffs
-        local debuffOne = _G['PartyMemberFrame' .. i .. 'Debuff1']
-        if debuffOne then
-            debuffOne:SetPoint('TOPLEFT', 120, -20)
+    -- Setup small icons positioning
+    local function updateSmallIcons()
+        local leaderIcon = _G['PartyMemberFrame' .. i .. 'LeaderIcon']
+        if leaderIcon then
+            leaderIcon:ClearAllPoints()
+            leaderIcon:SetPoint('BOTTOM', pf, 'TOP', -10, -6)
+            leaderIcon:SetSize(16, 16)
         end
 
-        -- Range checking
-        local function updateRange()
-            if UnitInRange then
-                local inRange, checkedRange = UnitInRange('party' .. i)
-                if checkedRange and not inRange then
-                    pf:SetAlpha(0.55)
-                    -- FIXED: Ensure health bar stays fully opaque even when frame is dimmed
-                    if pf.PartyFrameHealthBar then
-                        pf.PartyFrameHealthBar:SetAlpha(1.0)
-                        pf.PartyFrameHealthBar:SetVertexColor(1, 1, 1)
-                    end
-                else
-                    pf:SetAlpha(1)
-                    -- FIXED: Ensure health bar is fully opaque and bright
-                    if pf.PartyFrameHealthBar then
-                        pf.PartyFrameHealthBar:SetAlpha(1.0)
-                        pf.PartyFrameHealthBar:SetVertexColor(1, 1, 1)
-                    end
+        local masterIcon = _G['PartyMemberFrame' .. i .. 'MasterIcon']
+        if masterIcon then
+            masterIcon:ClearAllPoints()
+            masterIcon:SetPoint('BOTTOM', pf, 'TOP', -10 + 16, -6)
+        end
+
+        local guideIcon = _G['PartyMemberFrame' .. i .. 'GuideIcon']
+        if guideIcon then
+            guideIcon:ClearAllPoints()
+            guideIcon:SetPoint('BOTTOM', pf, 'TOP', -10, -6)
+        end
+
+        local pvpIcon = _G['PartyMemberFrame' .. i .. 'PVPIcon']
+        if pvpIcon then
+            pvpIcon:ClearAllPoints()
+            pvpIcon:SetPoint('CENTER', pf, 'TOPLEFT', 7, -24)
+        end
+
+        local readyCheck = _G['PartyMemberFrame' .. i .. 'ReadyCheck']
+        if readyCheck then
+            readyCheck:ClearAllPoints()
+            readyCheck:SetPoint('CENTER', _G['PartyMemberFrame' .. i .. 'Portrait'], 'CENTER', 0, -2)
+        end
+
+        local notPresentIcon = _G['PartyMemberFrame' .. i .. 'NotPresentIcon']
+        if notPresentIcon then
+            notPresentIcon:ClearAllPoints()
+            notPresentIcon:SetPoint('LEFT', pf, 'RIGHT', 2, -2)
+        end
+    end
+    
+    updateSmallIcons()
+    pf.updateSmallIcons = updateSmallIcons -- Store the function for later use
+end
+
+-- Sets up range checking for party frames
+function unitframe.SetupPartyFrameRange(i)
+    local pf = _G['PartyMemberFrame' .. i]
+    if not pf then return end
+
+    -- Range checking
+    local function updateRange()
+        if UnitInRange then
+            local inRange, checkedRange = UnitInRange('party' .. i)
+            if checkedRange and not inRange then
+                pf:SetAlpha(0.55)
+                -- FIXED: Ensure health bar stays fully opaque even when frame is dimmed
+                if pf.PartyFrameHealthBar then
+                    pf.PartyFrameHealthBar:SetAlpha(1.0)
+                    pf.PartyFrameHealthBar:SetVertexColor(1, 1, 1)
                 end
             else
-                -- Fallback for 3.3.5a - always show at full alpha
                 pf:SetAlpha(1)
+                -- FIXED: Ensure health bar is fully opaque and bright
+                if pf.PartyFrameHealthBar then
+                    pf.PartyFrameHealthBar:SetAlpha(1.0)
+                    pf.PartyFrameHealthBar:SetVertexColor(1, 1, 1)
+                end
             end
+        else
+            -- Fallback for 3.3.5a - always show at full alpha
+            pf:SetAlpha(1)
         end
+    end
 
-        pf:HookScript('OnUpdate', updateRange)
+    pf:HookScript('OnUpdate', updateRange)
+    pf.updateRange = updateRange
+end
 
-        -- Additional event handling for visual updates
-        pf:HookScript('OnShow', function(self)
-            -- SIMPLIFIED: Just hide original texture, don't change layers
-            local texture = _G['PartyMemberFrame' .. i .. 'Texture']
-            if texture then
-                texture:SetTexture()
-                texture:Hide()
-            end
-            if healthbar then
-                healthbar:SetStatusBarColor(1, 1, 1, 1)
-            end
-            updateSmallIcons()
-            updateRange()
-        end)
+-- Sets up all event handling for a party frame
+function unitframe.SetupPartyFrameEvents(i)
+    local pf = _G['PartyMemberFrame' .. i]
+    if not pf then return end
+    
+    local healthbar = _G['PartyMemberFrame' .. i .. 'HealthBar']
+    local manabar = _G['PartyMemberFrame' .. i .. 'ManaBar']
 
-        -- Hook party frame events for automatic updates
-        pf:RegisterEvent('PARTY_MEMBER_CHANGED')
-        pf:RegisterEvent('UNIT_HEALTH')
-        pf:RegisterEvent('UNIT_POWER_UPDATE')
-        pf:RegisterEvent('UNIT_MAXHEALTH')
-        pf:RegisterEvent('UNIT_MAXPOWER')
-        pf:RegisterEvent('UNIT_DISPLAYPOWER')
+    -- Additional event handling for visual updates
+    pf:HookScript('OnShow', function(self)
+        -- SIMPLIFIED: Just hide original texture, don't change layers
+        local texture = _G['PartyMemberFrame' .. i .. 'Texture']
+        if texture then
+            texture:SetTexture()
+            texture:Hide()
+        end
+        if healthbar then
+            healthbar:SetStatusBarColor(1, 1, 1, 1)
+        end
+        if pf.updateSmallIcons then
+            pf.updateSmallIcons()
+        end
+        -- updateRange call
+        if pf.updateRange then
+            pf.updateRange()
+        end
+    end)
 
-        -- Hook mana bar value changes to update texture coordinates AND text
+    -- Hook party frame events for automatic updates
+    pf:RegisterEvent('PARTY_MEMBER_CHANGED')
+    pf:RegisterEvent('UNIT_HEALTH')
+    pf:RegisterEvent('UNIT_POWER_UPDATE')
+    pf:RegisterEvent('UNIT_MAXHEALTH')
+    pf:RegisterEvent('UNIT_MAXPOWER')
+    pf:RegisterEvent('UNIT_DISPLAYPOWER')
+
+    -- Hook mana bar value changes to update texture coordinates AND text
+    if manabar then
         manabar:HookScript('OnValueChanged', function(self, value)
             unitframe.SetPartyManaBarCoords(self, 0) -- Actualizar coordenadas cuando cambie el valor
-
             -- ✅ FIX: También actualizar texto inmediatamente
             if UnitExists('party' .. i) then
                 unitframe.UpdatePartyFrameText(i)
             end
         end)
+    end
 
-        -- Hook health bar value changes to maintain class colors and texture switching
+    -- Hook health bar value changes to maintain class colors and texture switching
+    if healthbar then
         healthbar:HookScript('OnValueChanged', function(self, value)
             if not UnitExists('party' .. i) then
                 return
@@ -6029,61 +6109,60 @@ function unitframe.ChangePartyFrame()
                     -- Use individual -Status texture for class colors
                     self:SetStatusBarTexture(
                         'Interface\\Addons\\DragonUI\\Textures\\Partyframe\\UI-HUD-UnitFrame-Party-PortraitOn-Bar-Health-Status')
-                    -- FIXED: Don't force DrawLayer - let Blizzard use default layer like normal texture
-
-                    -- DEBUG: Log Status texture setup in hook
-                    local tex = self:GetStatusBarTexture()
-                    if tex then
-                        local layer, sublayer = tex:GetDrawLayer()
-                    end
 
                     local color = RAID_CLASS_COLORS[class]
                     self:SetStatusBarColor(color.r, color.g, color.b, 1)
                 end
             end
         end)
-
-        -- Hook the original OnEvent to update our custom elements
-        local originalOnEvent = pf:GetScript('OnEvent')
-        pf:SetScript('OnEvent', function(self, event, ...)
-            if originalOnEvent then
-                originalOnEvent(self, event, ...)
-            end
-
-            -- Update our custom bars when relevant events fire (with combat protection)
-            if event == 'UNIT_HEALTH' or event == 'UNIT_MAXHEALTH' or event == 'PARTY_MEMBER_CHANGED' then
-                local unit = ...
-                if unit == 'party' .. i then
-                    if not InCombatLockdown() and not UnitAffectingCombat('player') then
-                        unitframe.UpdatePartyHPBar(i)
-                    else
-                        -- Queue update for after combat
-                        unitframe.QueuePartyUpdate(i, 'health')
-                    end
-                end
-            elseif event == 'UNIT_POWER_UPDATE' or event == 'UNIT_MAXPOWER' or event == 'UNIT_DISPLAYPOWER' then
-                local unit = ...
-                if unit == 'party' .. i then
-                    if not InCombatLockdown() and not UnitAffectingCombat('player') then
-                        unitframe.UpdatePartyManaBar(i)
-                    else
-                        -- Queue update for after combat
-                        unitframe.QueuePartyUpdate(i, 'mana')
-                    end
-                end
-            end
-        end)
-
-        -- Initialize bars solo si hay un miembro real
-        if UnitExists('party' .. i) then
-            unitframe.UpdatePartyHPBar(i)
-            unitframe.UpdatePartyManaBar(i)
-        end
-
-        -- FIXED: Set frame levels ONCE during initialization, not on every update
-        unitframe.EnsurePartyFrameLayerOrder(i)
     end
 
+    -- Hook the original OnEvent to update our custom elements
+    local originalOnEvent = pf:GetScript('OnEvent')
+    pf:SetScript('OnEvent', function(self, event, ...)
+        if originalOnEvent then
+            originalOnEvent(self, event, ...)
+        end
+
+        -- Update our custom bars when relevant events fire (with combat protection)
+        if event == 'UNIT_HEALTH' or event == 'UNIT_MAXHEALTH' or event == 'PARTY_MEMBER_CHANGED' then
+            local unit = ...
+            if unit == 'party' .. i then
+                if not InCombatLockdown() and not UnitAffectingCombat('player') then
+                    unitframe.UpdatePartyHPBar(i)
+                else
+                    -- Queue update for after combat
+                    unitframe.QueuePartyUpdate(i, 'health')
+                end
+            end
+        elseif event == 'UNIT_POWER_UPDATE' or event == 'UNIT_MAXPOWER' or event == 'UNIT_DISPLAYPOWER' then
+            local unit = ...
+            if unit == 'party' .. i then
+                if not InCombatLockdown() and not UnitAffectingCombat('player') then
+                    unitframe.UpdatePartyManaBar(i)
+                else
+                    -- Queue update for after combat
+                    unitframe.QueuePartyUpdate(i, 'mana')
+                end
+            end
+        end
+    end)
+end
+
+-- Initialize bars for existing party members
+function unitframe.InitializePartyFrameBars(i)
+    -- Initialize bars solo si hay un miembro real
+    if UnitExists('party' .. i) then
+        unitframe.UpdatePartyHPBar(i)
+        unitframe.UpdatePartyManaBar(i)
+    end
+
+    -- FIXED: Set frame levels ONCE during initialization, not on every update
+    unitframe.EnsurePartyFrameLayerOrder(i)
+end
+
+-- Registers global party events
+function unitframe.RegisterPartyEvents()
     -- Register global events for party changes
     if not unitframe.PartyEventFrame then
         local eventFrame = CreateFrame('Frame')
@@ -6165,8 +6244,9 @@ function unitframe.ChangePartyFrame()
         unitframe.PartyEventFrame = eventFrame
     end
 end
+-- END OF REFACTORING
 
--- END PARTY FRAMES
+
 -- Function to update party state (position, scale, orientation)
 function unitframe:UpdatePartyState(state)
     if not unitframe.PartyMoveFrame then
