@@ -1405,31 +1405,26 @@ local function HandleCastingEvents(castbarType, event, unit, ...)
         -- ✅ CORRECCIÓN: CHANNEL_STOP nunca es interrupción real
         HandleCastStop(castbarType, event, false);
     elseif event == 'UNIT_SPELLCAST_FAILED' then
-        -- ✅ FAILED es fracaso real - pero NO mostrar "Interrupted"
-        local state = addon.castbarStates[castbarType];
-        local frameData = frames[castbarType];
-        
-        frameData.castbar:SetStatusBarTexture(TEXTURES.interrupted);
-        frameData.castbar:SetStatusBarColor(1, 0, 0, 1);
-        
-        state.casting = false;
-        state.isChanneling = false;
-        state.holdTime = cfg.holdTime or 0.3;
-    elseif event == 'UNIT_SPELLCAST_INTERRUPTED' then
-        -- ✅ SOLUCIÓN SIMPLE: Solo verificar si queda poco tiempo
-        local state = addon.castbarStates[castbarType];
-        local showInterrupted = true;
-        
-        if state.isChanneling and state.currentValue and state.maxValue then
-            -- Para channels: si queda menos del 5% del tiempo total, es natural
-            local progressRemaining = state.currentValue / state.maxValue;
-            if progressRemaining < 0.05 then
-                showInterrupted = false;
-            end
-        end
-        
-        HandleCastStop(castbarType, event, showInterrupted);
+    -- ✅ IGNORAR SOLO FAILED para el jugador (estos son los "falsos positivos")
+    if castbarType == "player" then
+        return;
     end
+    
+    -- Solo para target/focus: mostrar fallo
+    local state = addon.castbarStates[castbarType];
+    local frameData = frames[castbarType];
+    
+    frameData.castbar:SetStatusBarTexture(TEXTURES.interrupted);
+    frameData.castbar:SetStatusBarColor(1, 0, 0, 1);
+    
+    state.casting = false;
+    state.isChanneling = false;
+    state.holdTime = cfg.holdTime or 0.3;
+elseif event == 'UNIT_SPELLCAST_INTERRUPTED' then
+    -- ✅ PROCESAR INTERRUPTED para todos (son interrupciones legítimas)
+    -- YA NO IGNORAMOS este evento para el player
+    HandleCastStop(castbarType, event, true);
+end
 end
 
 local function HandleTargetChanged()
