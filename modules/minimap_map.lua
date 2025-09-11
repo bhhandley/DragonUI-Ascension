@@ -94,6 +94,45 @@ MinimapZoomIn:SetSize(20, 19)
 MinimapZoomIn:ClearAllPoints()
 MinimapZoomIn:SetPoint('CENTER', MinimapBackdrop, 'CENTER', 98, -33)
 
+-- zone click: click on Zonenname toggels WorldMap
+local minimapZoneButton = MinimapZoneTextButton or MinimapZoneButton or MinimapZoneText and MinimapZoneText:GetParent()
+if minimapZoneButton then
+    minimapZoneButton:ClearAllPoints()
+    minimapZoneButton:SetPoint("LEFT", Minimap.BorderTop or MinimapBorderTop or Minimap, "LEFT", 7, 1)
+    minimapZoneButton:SetWidth(108)
+
+    minimapZoneButton:EnableMouse(true)
+    minimapZoneButton:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    minimapZoneButton:SetScript("OnMouseUp", function(self, button)
+        if button ~= "LeftButton" then return end
+        if WorldMapFrame and WorldMapFrame:IsShown() then
+            HideUIPanel(WorldMapFrame)
+        else
+            if ToggleWorldMap then
+                ToggleWorldMap()
+            else
+                if WorldMapFrame then ShowUIPanel(WorldMapFrame) end
+            end
+        end
+    end)
+else
+-- Fallback: if MinimapZoneTextButton not exist, set a Overlay-Button onto text
+local overlay = CreateFrame("Button", "DragonUI_ZoneClickOverlay", Minimap)
+overlay:SetPoint("TOPLEFT", MinimapZoneText, "TOPLEFT", 0, 0)
+overlay:SetPoint("BOTTOMRIGHT", MinimapZoneText, "BOTTOMRIGHT", 0, 0)
+overlay:EnableMouse(true)
+overlay:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+overlay:SetScript("OnClick", function(self, button)
+    if button ~= "LeftButton" then return end
+        if WorldMapFrame and WorldMapFrame:IsShown() then
+            HideUIPanel(WorldMapFrame)
+        else
+            if ToggleWorldMap then ToggleWorldMap() else if WorldMapFrame then ShowUIPanel(WorldMapFrame) end end
+        end
+    end)
+end
+
+
 atlas(MinimapZoomOut:GetNormalTexture(), 'ui-hud-minimap-zoom-out', true)
 atlas(MinimapZoomOut:GetPushedTexture(), 'ui-hud-minimap-zoom-out-down', true)
 atlas(MinimapZoomOut:GetDisabledTexture(), 'ui-hud-minimap-zoom-out-down', true)
